@@ -1,52 +1,64 @@
 import os
 import json
-import requests
-from bs4 import BeautifulSoup
 import pandas as pd
 
-EXCEL_PATH = "data/DUIWE_PRESTASIE.xlsx"
-BENZING_URL = "https://mypigeons.benzing.live/za/en/results/2026/o-2-gam-gamtoos-federation/dashboard/"
+EXCEL_PATH = "DUIWE PRESTASIE.xlsx"
+DATA_DIR = "data"
 
-def fetch_benzing_results():
-    print("Checking Benzing Live for Gamtoos Federation updates...")
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-    try:
-        response = requests.get(BENZING_URL, headers=headers, timeout=15)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            # Custom parsing rules for your specific pigeon ring numbers go here
-            return [] 
-    except Exception as e:
-        print(f"Error accessing Benzing Live: {e}")
-    return []
-
-def process_breeding_indices():
+def process_pigeon_data():
     if not os.path.exists(EXCEL_PATH):
-        print("Excel data file not found. Skipping calculations.")
+        print(f"Error: {EXCEL_PATH} not found in the root directory!")
         return
 
-    print("Recalculating Breeding Performance Metrics...")
-    # Read the sheets exactly matching your structural sheets
-    race_perf = pd.read_excel(EXCEL_PATH, sheet_name="RacePerformance")
-    chicks = pd.read_excel(EXCEL_PATH, sheet_name="Chicks")
-    cocks = pd.read_excel(EXCEL_PATH, sheet_name="Cocks")
-    hens = pd.read_excel(EXCEL_PATH, sheet_name="Hens")
+    print("Reading sheets from DUIWE PRESTASIE.xlsx...")
+    
+    # Load all sheets safely
+    try:
+        race_perf = pd.read_excel(EXCEL_PATH, sheet_name="RacePerformance")
+        chicks = pd.read_excel(EXCEL_PATH, sheet_name="Chicks")
+        cocks = pd.read_excel(EXCEL_PATH, sheet_name="Cocks")
+        hens = pd.read_excel(EXCEL_PATH, sheet_name="Hens")
+        pairs = pd.read_excel(EXCEL_PATH, sheet_name="Pairs")
+    except Exception as e:
+        print(f"Error reading sheets: {e}")
+        return
 
-    # Example Automation: Instead of coping formulas down manually, Python handles it:
-    # Count how many chicks each Cock has in the Chicks sheet
+    print("Running calculations and auto-index mapping...")
+    
+    # Clear any trailing whitespace from IDs to prevent matching issues
+    for df in [race_perf, chicks, cocks, hens, pairs]:
+        for col in df.columns:
+            if 'ID' in col or 'Ring' in col:
+                df[col] = df[col].astype(str).str.strip()
+
+    # 1. Automate Cock stats from Chicks sheet
     if 'CockID' in chicks.columns and 'CockID' in cocks.columns:
         chick_counts = chicks['CockID'].value_counts()
-        cocks['TotalChicks'] = cocks['CockID'].map(chick_counts).fillna(0).astype(int)
+        cocks['Total Chicks'] = cocks['CockID'].map(chick_counts).fillna(0).astype(int)
+
+    # 2. Automate Hen stats from Chicks sheet
+    if 'HenID' in chicks.columns and 'HenID' in hens.columns:
+        hen_counts = chicks['HenID'].value_counts()
+        hens['Total Chicks'] = hens['HenID'].map(hen_counts).fillna(0).astype(int)
+
+    # Clean up NaN (blank values) so JavaScript doesn't break
+    cocks = cocks.fillna("")
+    hens = hens.fillna("")
+    pairs = pairs.fillna("")
+    chicks = chicks.fillna("")
+    race_perf = race_perf.fillna("")
 
     # Ensure output directory exists
-    os.makedirs("web/data", exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
 
-    # Save lightweight JSON files for your website frontend to read instantly
-    cocks.to_json("web/data/cocks.json", orient="records")
-    race_perf.to_json("web/data/race_performance.json", orient="records")
+    # Save to JSON format for the web dashboard to instantly grab
+    cocks.to_json(os.path.join(DATA_DIR, "cocks.json"), orient="records")
+    hens.to_json(os.path.join(DATA_DIR, "hens.json"), orient="records")
+    pairs.to_json(os.path.join(DATA_DIR, "pairs.json"), orient="records")
+    chicks.to_json(os.path.join(DATA_DIR, "chicks.json"), orient="records")
+    race_perf.to_json(os.path.join(DATA_DIR, "race_performance.json"), orient="records")
     
-    print("Web assets updated successfully.")
+    print("All web data matrices updated successfully!")
 
 if __name__ == "__main__":
-    new_results = fetch_benzing_results()
-    process_breeding_indices()
+    process_pigeon_data()

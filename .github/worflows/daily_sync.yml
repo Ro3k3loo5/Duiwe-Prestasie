@@ -1,0 +1,33 @@
+name: Daily Benzing Sync
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 14 * * *'
+
+jobs:
+  build-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Data Tools
+        run: |
+          pip install pandas openpyxl beautifulsoup4 requests
+
+      - name: Run Scraper Engine
+        run: python scraper.py
+
+      - name: Save Changes to Repository
+        run: |
+          git config --global user.name "Pigeon Automated Bot"
+          git config --global user.email "bot@github.com"
+          git add data/
+          git commit -m "Automated Sync: Updated race data & breeding indexes" || exit 0
+          git push

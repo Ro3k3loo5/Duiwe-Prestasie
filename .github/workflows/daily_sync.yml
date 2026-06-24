@@ -2,9 +2,8 @@ name: Daily Benzing Sync & Index Calculation
 
 on:
   schedule:
-    # 14:00 UTC matches 16:00 (4:00 PM) South African Standard Time
     - cron: '0 14 * * *'
-  workflow_dispatch: # Gives you a manual button to test it instantly
+  workflow_dispatch:
 
 jobs:
   build-and-sync:
@@ -29,6 +28,6 @@ jobs:
         run: |
           git config --global user.name "Pigeon Automated Bot"
           git config --global user.email "bot@github.com"
-          git add data/ DUIWE\ PRESTASIE.xlsx
+          git add data/
           git commit -m "Automated Sync: Updated race data & breeding indexes" || exit 0
           git push

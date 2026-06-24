@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
           persist-credentials: true
 
       - name: Set up Python
@@ -35,5 +35,7 @@ jobs:
           git config --global user.name "Pigeon Automated Bot"
           git config --global user.email "bot@github.com"
           git add data/
-          git commit -m "Automated Sync: Updated race data & breeding indexes" || exit 0
-          git push origin main
+          git commit -m "Automated Sync: Updated race data & breeding indexes" || echo "No changes to commit"
+          git fetch origin main
+          git rebase origin/main || { echo "Rebase failed — aborting for manual resolution"; git rebase --abort || true; exit 1; }
+          git push origin HEAD:main

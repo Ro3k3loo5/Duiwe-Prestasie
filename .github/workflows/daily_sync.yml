@@ -26,10 +26,13 @@ jobs:
 
       - name: Install Data Tools
         run: |
-          pip install pandas openpyxl beautifulsoup4 requests
+          pip install pandas openpyxl beautifulsoup4 requests gspread google-auth
 
       - name: Run Scraper Engine
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: python scraper.py
+        
 
       - name: Save Changes to Repository
         run: |

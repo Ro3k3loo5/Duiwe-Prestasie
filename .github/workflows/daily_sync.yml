@@ -1,9 +1,9 @@
-name: Daily Benzing Sync & Index Calculation
+name: Daily Benzing Sync
 
 on:
+  workflow_dispatch: {}
   schedule:
     - cron: '0 14 * * *'
-  workflow_dispatch:
 
 jobs:
   build-and-sync:

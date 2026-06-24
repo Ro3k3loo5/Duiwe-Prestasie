@@ -5,6 +5,10 @@ on:
   schedule:
     - cron: '0 14 * * *'
 
+# This block forces GitHub to give the runner write access to save your JSON files
+permissions:
+  contents: write
+
 jobs:
   build-and-sync:
     runs-on: ubuntu-latest

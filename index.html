@@ -11,6 +11,8 @@
         .nav-tabs .nav-link.active { font-weight: 600; border-bottom: 3px solid #0d6efd; }
         .table-container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .mobile-form-card { background: #ffffff; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 20px; }
+        .live-badge { background-color: #dc3545; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; animation: blink 1.5s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
@@ -19,7 +21,7 @@
     <header class="mb-3 pb-2 border-bottom d-flex justify-content-between align-items-center">
         <div>
             <h1 class="h3 fw-bold text-dark mb-0">Pigeon Management</h1>
-            <p class="text-muted small mb-0">Live Sync Dashboard</p>
+            <p class="text-muted small mb-0">Live Pull-to-Refresh Data Pipeline</p>
         </div>
         <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#mobileFormSection">
             ➕ Quick Entry Form
@@ -69,7 +71,7 @@
         <li class="nav-item"><button class="nav-link" id="chicks-tab" data-bs-toggle="tab" data-bs-target="#chicks" type="button" role="tab">Chicks</button></li>
         <li class="nav-item"><button class="nav-link" id="round-tab" data-bs-toggle="tab" data-bs-target="#round" type="button" role="tab">ByRound</button></li>
         <li class="nav-item"><button class="nav-link" id="month-tab" data-bs-toggle="tab" data-bs-target="#month" type="button" role="tab">ByMonth</button></li>
-        <li class="nav-item"><button class="nav-link" id="race-tab" data-bs-toggle="tab" data-bs-target="#race" type="button" role="tab">Race Performance</button></li>
+        <li class="nav-item"><button class="nav-link" id="race-tab" data-bs-toggle="tab" data-bs-target="#race" type="button" role="tab">Race Performance <span class="live-badge">LIVE</span></button></li>
     </ul>
 
     <div class="tab-content" id="pigeonTabsContent">
@@ -80,51 +82,48 @@
         <div class="tab-pane fade" id="chicks" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-chicks"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
         <div class="tab-pane fade" id="round" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-round"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
         <div class="tab-pane fade" id="month" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-month"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
-        <div class="tab-pane fade" id="race" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-race"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="race" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-race"><thead><tr><th>Loading live feed from Benzing...</th></tr></thead><tbody></tbody></table></div></div></div>
     </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 <script>
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxmT-tFSrRyUtuya5La25Y5boPmOpf4QQe-Y-j4A3p_KPmVNMp5rEa-mNq3KkTDYHK15Q/exec";
+    const SHEET_ID = "1ulog31dbsBRfzdl_zNMroCBNwdKh89HwOfXPSEoIDLk";
+    
+    // Direct Benzing Live data scraping target
+    const BENZING_URL = "https://mypigeons.benzing.live/za/en/results/2026/o-2-gam-gamtoos-federation/race/7/";
 
-    // Handle form submissions from mobile screen
+    // Handle Form Submit
     async function submitMobileData(event) {
         event.preventDefault();
         const submitBtn = document.getElementById('submitBtn');
         submitBtn.disabled = true;
         submitBtn.innerText = "Saving row...";
 
-        // Extracting input values
-        const chickId = document.getElementById('form-chick-id').value;
-        const ring = document.getElementById('form-ring').value;
-        const cock = document.getElementById('form-cock').value;
-        const hen = document.getElementById('form-hen').value;
-        const color = document.getElementById('form-color').value;
-
-        // NOTE: Make sure this array exactly matches your spreadsheet column sequence!
         const payload = {
             sheetName: "Chicks",
-            data: [chickId, ring, cock, hen, color]
+            data: [
+                document.getElementById('form-chick-id').value,
+                document.getElementById('form-ring').value,
+                document.getElementById('form-cock').value,
+                document.getElementById('form-hen').value,
+                document.getElementById('form-color').value
+            ]
         };
 
         try {
-            const response = await fetch(SCRIPT_URL, {
+            await fetch(SCRIPT_URL, {
                 method: 'POST',
-                mode: 'no-cors', // Bypasses browser cross-origin policy block structures cleanly
+                mode: 'no-cors',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-
-            alert('🚀 Sent to Google Sheets! Row appended successfully.');
+            alert('🚀 Sent to Google Sheets! Pull down to refresh data views.');
             document.getElementById('chickForm').reset();
-            
-            // Auto hide the form box again
-            const bsCollapse = new bootstrap.Collapse(document.getElementById('mobileFormSection'));
-            bsCollapse.hide();
-
+            bootstrap.Collapse.getInstance(document.getElementById('mobileFormSection')).hide();
+            loadAllData();
         } catch (error) {
-            console.error('Data pipeline error:', error);
             alert('⚠️ Network connection issue: ' + error.message);
         } finally {
             submitBtn.disabled = false;
@@ -132,45 +131,100 @@
         }
     }
 
-    // Universal read tables logic
-    async function loadTableData(fileUrl, tableId) {
+    // Direct Browser Fetch for Google Sheet Tabs
+    async function loadGoogleSheetTab(tabName, tableId) {
         const table = document.getElementById(tableId);
         try {
-            const response = await fetch(fileUrl);
-            if (!response.ok) throw new Error(`HTTP status: ${response.status}`);
-            const data = await response.json();
-            if (data.length === 0) {
-                table.innerHTML = '<thead><tr><th>No Records Found</th></tr></thead>';
+            const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${tabName}`;
+            const response = await fetch(url);
+            const text = await response.text();
+            
+            // Clean Google JSON wrapper layout
+            const jsonData = JSON.parse(text.substring(47, text.length - 2));
+            const rows = jsonData.table.rows;
+            const cols = jsonData.table.cols;
+
+            if (rows.length === 0) {
+                table.innerHTML = '<thead><tr><th>No Data Found</th></tr></thead>';
                 return;
             }
-            const headers = Object.keys(data[0]);
+
             let headerHTML = '<tr class="table-dark">';
-            headers.forEach(h => { headerHTML += `<th>${h}</th>`; });
+            cols.forEach(c => { headerHTML += `<th>${c.label || 'Field'}</th>`; });
             headerHTML += '</tr>';
             table.querySelector('thead').innerHTML = headerHTML;
 
             let bodyHTML = '';
-            data.forEach(row => {
+            rows.forEach(r => {
                 bodyHTML += '<tr>';
-                headers.forEach(h => { bodyHTML += `<td>${row[h] !== null ? row[h] : ''}</td>`; });
+                r.c.forEach(cell => {
+                    bodyHTML += `<td>${cell ? (cell.v ?? '') : ''}</td>`;
+                });
                 bodyHTML += '</tr>';
             });
             table.querySelector('tbody').innerHTML = bodyHTML;
         } catch (e) {
-            table.innerHTML = `<thead><tr><th class="text-danger">⚠️ Offline dataset (${e.message})</th></tr></thead>`;
+            table.innerHTML = `<thead><tr><th class="text-danger">⚠️ Could not load tab (${e.message})</th></tr></thead>`;
         }
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
-        loadTableData('data/summary.json', 'table-summary');
-        loadTableData('data/cocks.json', 'table-cocks');
-        loadTableData('data/hens.json', 'table-hens');
-        loadTableData('data/pairs.json', 'table-pairs');
-        loadTableData('data/chicks.json', 'table-chicks');
-        loadTableData('data/byround.json', 'table-round');
-        loadTableData('data/bymonth.json', 'table-month');
-        loadTableData('data/race_performance.json', 'table-race');
-    });
+    // Live Benzing Scraping Engine right on the frontend
+    async function loadLiveBenzingRace() {
+        const table = document.getElementById('table-race');
+        try {
+            // Uses a free proxy proxy to bypass CORS security constraints on phone browsers
+            const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(BENZING_URL);
+            const response = await fetch(proxyUrl);
+            const json = await response.json();
+            
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(json.contents, 'text/html');
+            const rows = doc.querySelectorAll('tr');
+
+            let headerHTML = '<tr class="table-danger"><th>Nom</th><th>Fancier / Team</th><th>Pigeon</th><th>Arrival</th><th>Speed (m/min)</th><th>Distance (km)</th></tr>';
+            table.querySelector('thead').innerHTML = headerHTML;
+
+            let bodyHTML = '';
+            let count = 0;
+
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 6) {
+                    count++;
+                    bodyHTML += '<tr>';
+                    bodyHTML += `<td><strong>${cells[0].textContent.strip || count}</strong></td>`;
+                    bodyHTML += `<td>${cells[1].textContent.trim()}</td>`;
+                    bodyHTML += `<td><span class="badge bg-secondary">${cells[2].textContent.trim()}</span></td>`;
+                    bodyHTML += `<td>text-success fw-bold">${cells[3].textContent.trim()}</td>`;
+                    bodyHTML += `<td>${cells[4].textContent.trim()}</td>`;
+                    bodyHTML += `<td>${cells[5].textContent.trim()}</td>`;
+                    bodyHTML += '</tr>';
+                }
+            });
+
+            if(count === 0) {
+                table.innerHTML = '<thead><tr><th>No live arrivals posted yet on Benzing</th></tr></thead>';
+            } else {
+                table.querySelector('tbody').innerHTML = bodyHTML;
+            }
+        } catch (e) {
+            table.innerHTML = `<thead><tr><th class="text-warning">⚠️ Direct live streaming paused. Pull down to try connection again.</th></tr></thead>`;
+        }
+    }
+
+    function loadAllData() {
+        loadGoogleSheetTab('Summary', 'table-summary');
+        loadGoogleSheetTab('Cocks', 'table-cocks');
+        loadGoogleSheetTab('Hens', 'table-hens');
+        loadGoogleSheetTab('Pairs', 'table-pairs');
+        loadGoogleSheetTab('Chicks', 'table-chicks');
+        loadGoogleSheetTab('ByRound', 'table-round');
+        loadGoogleSheetTab('ByMonth', 'table-month');
+        loadLiveBenzingRace();
+    }
+
+    // Initial Trigger on load
+    document.addEventListener("DOMContentLoaded", loadAllData);
 </script>
 </body>
 </html>

@@ -11,7 +11,6 @@
         .nav-tabs .nav-link.active { font-weight: 600; border-bottom: 3px solid #0d6efd; }
         .table-container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .mobile-form-card { background: #ffffff; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 20px; }
-        .sync-badge { background-color: #198754; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -20,7 +19,7 @@
     <header class="mb-3 pb-2 border-bottom d-flex justify-content-between align-items-center">
         <div>
             <h1 class="h3 fw-bold text-dark mb-0">Pigeon Management</h1>
-            <p class="text-muted small mb-0">Auto-sync updates every 5 mins</p>
+            <p class="text-muted small mb-0">Automated Daily Sync Dashboard</p>
         </div>
         <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#mobileFormSection">
             ➕ Quick Entry Form
@@ -70,18 +69,18 @@
         <li class="nav-item"><button class="nav-link" id="chicks-tab" data-bs-toggle="tab" data-bs-target="#chicks" type="button" role="tab">Chicks</button></li>
         <li class="nav-item"><button class="nav-link" id="round-tab" data-bs-toggle="tab" data-bs-target="#round" type="button" role="tab">ByRound</button></li>
         <li class="nav-item"><button class="nav-link" id="month-tab" data-bs-toggle="tab" data-bs-target="#month" type="button" role="tab">ByMonth</button></li>
-        <li class="nav-item"><button class="nav-link" id="race-tab" data-bs-toggle="tab" data-bs-target="#race" type="button" role="tab">Race Performance <span class="sync-badge">5-MIN SYNC</span></button></li>
+        <li class="nav-item"><button class="nav-link" id="race-tab" data-bs-toggle="tab" data-bs-target="#race" type="button" role="tab">Race Performance</button></li>
     </ul>
 
     <div class="tab-content" id="pigeonTabsContent">
-        <div class="tab-pane fade show active" id="summary" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-summary"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
-        <div class="tab-pane fade" id="cocks" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-cocks"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
-        <div class="tab-pane fade" id="hens" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-hens"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
-        <div class="tab-pane fade" id="pairs" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-pairs"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
-        <div class="tab-pane fade" id="chicks" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-chicks"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
-        <div class="tab-pane fade" id="round" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-round"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
-        <div class="tab-pane fade" id="month" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-month"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
-        <div class="tab-pane fade" id="race" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-race"><thead><tr><th>Loading...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade show active" id="summary" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-summary"><thead><tr><th>Loading Data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="cocks" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-cocks"><thead><tr><th>Loading Data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="hens" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-hens"><thead><tr><th>Loading Data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="pairs" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-pairs"><thead><tr><th>Loading Data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="chicks" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-chicks"><thead><tr><th>Loading Data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="round" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-round"><thead><tr><th>Loading Data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="month" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-month"><thead><tr><th>Loading Data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="race" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover table-sm align-middle" id="table-race"><thead><tr><th>Loading Data...</th></tr></thead><tbody></tbody></table></div></div></div>
     </div>
 </div>
 
@@ -107,65 +106,4 @@
         };
 
         try {
-            await fetch(SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            alert('🚀 Record appended to Google Sheets! Background pipeline will fetch it shortly.');
-            document.getElementById('chickForm').reset();
-            bootstrap.Collapse.getInstance(document.getElementById('mobileFormSection')).hide();
-        } catch (error) {
-            alert('⚠️ Connection issue: ' + error.message);
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.innerText = "Save to Google Sheet";
-        }
-    }
-
-    async function loadTableData(fileUrl, tableId) {
-        const table = document.getElementById(tableId);
-        try {
-            // Append timestamp parameter to force browser to skip cache and load latest JSON data file
-            const response = await fetch(fileUrl + '?t=' + new Date().getTime());
-            if (!response.ok) throw new Error(`HTTP status: ${response.status}`);
-            const data = await response.json();
-            
-            if (data.length === 0) {
-                table.innerHTML = '<thead><tr><th>No Records Found</th></tr></thead>';
-                return;
-            }
-            const headers = Object.keys(data[0]);
-            let headerHTML = '<tr class="table-dark">';
-            headers.forEach(h => { headerHTML += `<th>${h}</th>`; });
-            headerHTML += '</tr>';
-            table.querySelector('thead').innerHTML = headerHTML;
-
-            let bodyHTML = '';
-            data.forEach(row => {
-                bodyHTML += '<tr>';
-                headers.forEach(h => { bodyHTML += `<td>${row[h] !== null ? row[h] : ''}</td>`; });
-                bodyHTML += '</tr>';
-            });
-            table.querySelector('tbody').innerHTML = bodyHTML;
-        } catch (e) {
-            table.innerHTML = `<thead><tr><th class="text-danger">⚠️ Fetching data... (${e.message})</th></tr></thead>`;
-        }
-    }
-
-    function loadAllData() {
-        loadTableData('data/summary.json', 'table-summary');
-        loadTableData('data/cocks.json', 'table-cocks');
-        loadTableData('data/hens.json', 'table-hens');
-        loadTableData('data/pairs.json', 'table-pairs');
-        loadTableData('data/chicks.json', 'table-chicks');
-        loadTableData('data/byround.json', 'table-round');
-        loadTableData('data/bymonth.json', 'table-month');
-        loadTableData('data/race_performance.json', 'table-race');
-    }
-
-    document.addEventListener("DOMContentLoaded", loadAllData);
-</script>
-</body>
-</html>
+            await fetch(

@@ -10,51 +10,63 @@ from google.oauth2.service_account import Credentials
 # Configuration
 SPREADSHEET_ID = "1ulog31dbsBRfzdl_zNMroCBNwdKh89HwOfXPSEoIDLk"
 DATA_DIR = "data"
-BENZING_DASHBOARD_URL = "https://mypigeons.benzing.live/za/en/results/2026/o-2-gam-gamtoos-federation/dashboard/"
+# Using your exact new target page that lists the entire season's itinerary
+BENZING_RACES_PAGE_URL = "https://mypigeons.benzing.live/za/en/results/2026/o-2-gam-gamtoos-federation/races/"
 
 def get_google_sheets_client():
-    """Authenticates using the encrypted GitHub Secret packet."""
     creds_json = os.environ.get("GOOGLE_CREDENTIALS")
     if not creds_json:
         raise ValueError("⚠️ GOOGLE_CREDENTIALS secret is missing from GitHub Settings!")
-    
-    scopes = [
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive'
-    ]
+    scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
     creds_dict = json.loads(creds_json)
-    credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    return gspread.authorize(credentials)
+    return gspread.authorize(Credentials.from_service_account_info(creds_dict, scopes=scopes))
 
-def get_all_race_urls(dashboard_url):
-    print("🔍 Scanning Benzing Dashboard for all active race links...")
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    race_urls = []
+def get_active_race_links(races_url):
+    print("🔍 Scanning the complete Season Schedule for active rows...")
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    links_to_scrape = []
     try:
-        response = requests.get(dashboard_url, headers=headers, timeout=15)
-        if response.status_code != 200: return race_urls
+        response = requests.get(races_url, headers=headers, timeout=15)
+        if response.status_code != 200: return links_to_scrape
+        
         soup = BeautifulSoup(response.text, 'html.parser')
-        for link in soup.find_all('a', href=True):
-            href = link['href']
-            if '/race/' in href:
-                full_url = urljoin(dashboard_url, href)
-                if full_url not in race_urls: race_urls.append(full_url)
-        print(f"📋 Found {len(race_urls)} total race links on Benzing.")
+        
+        # Benzing lists each race inside individual list-items or distinct block containers
+        # We find blocks that contain our keywords, then grab their arrival data links
+        for element in soup.find_all(['li', 'div', 'tr']):
+            text_content = element.get_text()
+            
+            # Check for your exact criteria: 'Processed' or 'Being evaluated'
+            if "Processed" in text_content or "Being evaluated" in text_content:
+                # Inside this active race block, look for the data-table hyperlinks
+                for a_tag in element.find_all('a', href=True):
+                    href = a_tag['href']
+                    # Look for the sub-link that shows arrivals sorted by speed or by pigeons
+                    if "By speed" in a_tag.get_text() or "Arrivals" in a_tag.get_text() or "/race/" in href:
+                        full_url = urljoin(races_url, href)
+                        if full_url not in links_to_scrape:
+                            links_to_scrape.append(full_url)
+                            
+        print(f"📋 Found {len(links_to_scrape)} active race result tables matching your rule.")
     except Exception as e:
-        print(f"⚠️ Dashboard scanning skipped: {e}")
-    return race_urls
+        print(f"⚠️ Failed parsing the main schedule page: {e}")
+    return links_to_scrape
 
 def scrape_individual_race(url):
+    print(f"🌐 Extracting arrivals from: {url}")
     headers = {'User-Agent': 'Mozilla/5.0'}
     records = []
     try:
         response = requests.get(url, headers=headers, timeout=15)
         if response.status_code != 200: return records
+        
         soup = BeautifulSoup(response.text, 'html.parser')
         rows = soup.find_all('tr')
         
-        title_elem = soup.find('h1') or soup.find('h2')
+        title_elem = soup.find('h1') or soup.find('h2') or soup.find('title')
         race_name = title_elem.text.strip().split("\n")[0] if title_elem else "Live Race"
+        # Clean up any leftover menu navigation text from the header string
+        race_name = race_name.replace("Races", "").replace("-", "").strip()
 
         for row in rows:
             cells = row.find_all('td')
@@ -70,18 +82,16 @@ def scrape_individual_race(url):
                     "Distance": text_data[5]
                 })
     except Exception as e:
-        print(f"⚠️ Error pulling race data from {url}: {e}")
+        print(f"⚠️ Error pulling table from {url}: {e}")
     return records
 
 def process_pigeon_data():
     print("⚙️ Initiating Two-Way Cloud Sync Engine...")
-    
-    # Authenticate directly with Google Sheets API
     gc = get_google_sheets_client()
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     
-    # 1. READ ALL CURRENT DATA FROM GOOGLE FOR DASHBOARD
-    sheets_to_load = ["RacePerformance", "Chicks", "Cocks", "Hens", "Pairs", "ByRound", "ByMonth", "Summary"]
+    # 1. DOWNLOAD SYSTEM DATA ROWS FOR INTERFACE (Bypassing duplicate warning sheets safely)
+    sheets_to_load = ["RacePerformance", "Pairs", "ByRound", "ByMonth"]
     data_maps = {}
     
     for s_name in sheets_to_load:
@@ -92,21 +102,20 @@ def process_pigeon_data():
             data_maps[s_name] = df.fillna("")
             print(f"✅ Downloaded current tab: {s_name}")
         except Exception as e:
-            print(f"⚠️ Tracking warning on sheet '{s_name}': {e}")
+            print(f"⚠️ Skipping tab layout validation on '{s_name}': {e}")
             data_maps[s_name] = pd.DataFrame()
 
-    # 2. FETCH EVERYTHING FROM BENZING LIVE
-    live_race_links = get_all_race_urls(BENZING_DASHBOARD_URL)
+    # 2. RUN DYNAMIC STATUS CHECK IN THE BACKGROUND
+    active_tables = get_active_race_links(BENZING_RACES_PAGE_URL)
     all_scraped_arrivals = []
-    for link in live_race_links:
-        all_scraped_arrivals.extend(scrape_individual_race(link))
+    for table_url in active_tables:
+        all_scraped_arrivals.extend(scrape_individual_race(table_url))
 
-    # 3. COMPARE AND AUTOMATICALLY WRITE MISSING ROWS BACK TO GOOGLE SHEET
+    # 3. COMPARE AND APPEND NEW ARRIVALS BACK TO THE TAB
     if all_scraped_arrivals:
         race_perf_sheet = spreadsheet.worksheet("RacePerformance")
         existing_rows = race_perf_sheet.get_all_values()
         
-        # Build an index of what birds/races already exist in his sheet to prevent duplicates
         existing_keys = set()
         if len(existing_rows) > 0:
             headers = [h.strip() for h in existing_rows[0]]
@@ -119,36 +128,33 @@ def process_pigeon_data():
                 if p_id and r_id:
                     existing_keys.add((p_id.strip(), r_id.strip()))
 
-        # Filter out anything your brother doesn't have yet (like the June 20th results!)
         new_rows_to_append = []
         for arrival in all_scraped_arrivals:
             key = (arrival["PigeonID"], arrival["Race"])
             if key not in existing_keys:
-                # Map the scraped values directly to match his sheet's column structure
                 new_row = [
-                    "",                  # RaceID (Leave blank or manual fill)
+                    "",                  # RaceID
                     "",                  # Date
                     arrival["Race"],     # RaceName
                     "",                  # Federation Total Birds
                     "",                  # Loft Total Birds
-                    arrival["PigeonID"], # ChickID / Ring
+                    arrival["PigeonID"], # ChickID
                     arrival["Distance"], # Distance_km
                     arrival["Speed"],    # Speed_mpm
                 ]
                 new_rows_to_append.append(new_row)
 
         if new_rows_to_append:
-            print(f"🚀 Found {len(new_rows_to_append)} missing race rows (including June 20th). Appending directly to Google Sheets...")
+            print(f"🚀 Appending {len(new_rows_to_append)} new rows directly to Google Sheets...")
             race_perf_sheet.append_rows(new_rows_to_append)
-            print("📝 Google Sheet cells updated successfully!")
+            print("📝 Google Sheet cells populated successfully!")
             
-            # Refresh local dataset cache so the webpage gets it instantly too
             updated_df = pd.DataFrame(race_perf_sheet.get_all_records())
             data_maps["RacePerformance"] = updated_df.fillna("")
         else:
-            print("✨ Google Sheet is already fully up to date with all Benzing records.")
+            print("✨ Google Sheet is completely up to date with the season itinerary.")
 
-    # 4. SAVE LOCAL REFRESHED PACKETS FOR MOBILE WEB
+    # 4. SAVE CACHED JSON DATA FOR THE WEBSITE VIEW
     os.makedirs(DATA_DIR, exist_ok=True)
     for sheet_name, df in data_maps.items():
         if sheet_name == "RacePerformance": filename = "race_performance.json"

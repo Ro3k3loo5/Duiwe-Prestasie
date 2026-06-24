@@ -1,10 +1,9 @@
-name: Continuous Pigeon Sync
+name: Daily Benzing Sync
 
 on:
   workflow_dispatch: {}
   schedule:
-    # This instructs GitHub to run the sync pipeline every 5 minutes automatically
-    - cron: '*/5 * * * *'
+    - cron: '0 14 * * *'
 
 permissions:
   contents: write
@@ -36,7 +35,7 @@ jobs:
           git config --global user.name "Pigeon Automated Bot"
           git config --global user.email "bot@github.com"
           git add data/
-          git commit -m "Automated Sync: Multi-matrix live refresh" || echo "No changes to commit"
+          git commit -m "Automated Sync: Restored stable data pipeline" || echo "No changes to commit"
           git fetch origin main
           git rebase origin/main || { echo "Rebase failed — aborting"; git rebase --abort || true; exit 1; }
           git push origin HEAD:main

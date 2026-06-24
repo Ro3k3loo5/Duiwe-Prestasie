@@ -106,4 +106,66 @@
         };
 
         try {
-            await fetch(
+            await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            alert('🚀 Record appended to Google Sheets! It will appear on your dashboard during the next daily sync.');
+            document.getElementById('chickForm').reset();
+            bootstrap.Collapse.getInstance(document.getElementById('mobileFormSection')).hide();
+        } catch (error) {
+            alert('⚠️ Connection issue: ' + error.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerText = "Save to Google Sheet";
+        }
+    }
+
+    async function loadTableData(filename, tableId) {
+        const table = document.getElementById(tableId);
+        try {
+            // Uses relative path prefixing to make absolutely sure it points to the generated folder
+            const fileUrl = `./data/${filename}?t=` + new Date().getTime();
+            const response = await fetch(fileUrl);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            
+            if (!data || data.length === 0) {
+                table.innerHTML = '<thead><tr><th>No Records Found</th></tr></thead>';
+                return;
+            }
+            const headers = Object.keys(data[0]);
+            let headerHTML = '<tr class="table-dark">';
+            headers.forEach(h => { headerHTML += `<th>${h}</th>`; });
+            headerHTML += '</tr>';
+            table.querySelector('thead').innerHTML = headerHTML;
+
+            let bodyHTML = '';
+            data.forEach(row => {
+                bodyHTML += '<tr>';
+                headers.forEach(h => { bodyHTML += `<td>${row[h] !== null ? row[h] : ''}</td>`; });
+                bodyHTML += '</tr>';
+            });
+            table.querySelector('tbody').innerHTML = bodyHTML;
+        } catch (e) {
+            table.innerHTML = `<thead><tr><th class="text-danger">⚠️ Connection issue (${e.message})</th></tr></thead>`;
+        }
+    }
+
+    function loadAllData() {
+        loadTableData('summary.json', 'table-summary');
+        loadTableData('cocks.json', 'table-cocks');
+        loadTableData('hens.json', 'table-hens');
+        loadTableData('pairs.json', 'table-pairs');
+        loadTableData('chicks.json', 'table-chicks');
+        loadTableData('byround.json', 'table-round');
+        loadTableData('bymonth.json', 'table-month');
+        loadTableData('race_performance.json', 'table-race');
+    }
+
+    document.addEventListener("DOMContentLoaded", loadAllData);
+</script>
+</body>
+</html>

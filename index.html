@@ -21,70 +21,30 @@
     </header>
 
     <ul class="nav nav-tabs mb-4" id="pigeonTabs" role="tablist">
-        <li class="nav-item">
-            <button class="nav-link active" id="cocks-tab" data-bs-toggle="tab" data-bs-target="#cocks" type="button" role="tab">Cocks (Gale)</button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link" id="hens-tab" data-bs-toggle="tab" data-bs-target="#hens" type="button" role="tab">Hens (Duivinne)</button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link" id="pairs-tab" data-bs-toggle="tab" data-bs-target="#pairs" type="button" role="tab">Breeding Pairs</button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link" id="race-tab" data-bs-toggle="tab" data-bs-target="#race" type="button" role="tab">Race Performance</button>
-        </li>
+        <li class="nav-item"><button class="nav-link active" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary" type="button" role="tab">Summary</button></li>
+        <li class="nav-item"><button class="nav-link" id="cocks-tab" data-bs-toggle="tab" data-bs-target="#cocks" type="button" role="tab">Cocks</button></li>
+        <li class="nav-item"><button class="nav-link" id="hens-tab" data-bs-toggle="tab" data-bs-target="#hens" type="button" role="tab">Hens</button></li>
+        <li class="nav-item"><button class="nav-link" id="pairs-tab" data-bs-toggle="tab" data-bs-target="#pairs" type="button" role="tab">Breeding Pairs</button></li>
+        <li class="nav-item"><button class="nav-link" id="chicks-tab" data-bs-toggle="tab" data-bs-target="#chicks" type="button" role="tab">Chicks</button></li>
+        <li class="nav-item"><button class="nav-link" id="round-tab" data-bs-toggle="tab" data-bs-target="#round" type="button" role="tab">ByRound</button></li>
+        <li class="nav-item"><button class="nav-link" id="month-tab" data-bs-toggle="tab" data-bs-target="#month" type="button" role="tab">ByMonth</button></li>
+        <li class="nav-item"><button class="nav-link" id="race-tab" data-bs-toggle="tab" data-bs-target="#race" type="button" role="tab">Race Performance</button></li>
     </ul>
 
     <div class="tab-content" id="pigeonTabsContent">
-        <div class="tab-pane fade show active" id="cocks" role="tabpanel">
-            <div class="table-container">
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover align-middle" id="table-cocks">
-                        <thead class="table-dark"><tr><th>Loading data...</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="tab-pane fade" id="hens" role="tabpanel">
-            <div class="table-container">
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover align-middle" id="table-hens">
-                        <thead class="table-dark"><tr><th>Loading data...</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="tab-pane fade" id="pairs" role="tabpanel">
-            <div class="table-container">
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover align-middle" id="table-pairs">
-                        <thead class="table-dark"><tr><th>Loading data...</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="tab-pane fade" id="race" role="tabpanel">
-            <div class="table-container">
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover align-middle" id="table-race">
-                        <thead class="table-dark"><tr><th>Loading data...</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+        <div class="tab-pane fade show active" id="summary" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover align-middle" id="table-summary"><thead class="table-dark"><tr><th>Loading data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="cocks" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover align-middle" id="table-cocks"><thead class="table-dark"><tr><th>Loading data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="hens" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover align-middle" id="table-hens"><thead class="table-dark"><tr><th>Loading data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="pairs" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover align-middle" id="table-pairs"><thead class="table-dark"><tr><th>Loading data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="chicks" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover align-middle" id="table-chicks"><thead class="table-dark"><tr><th>Loading data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="round" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover align-middle" id="table-round"><thead class="table-dark"><tr><th>Loading data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="month" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover align-middle" id="table-month"><thead class="table-dark"><tr><th>Loading data...</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div class="tab-pane fade" id="race" role="tabpanel"><div class="table-container"><div class="table-responsive"><table class="table table-striped table-hover align-middle" id="table-race"><thead class="table-dark"><tr><th>Loading data...</th></tr></thead><tbody></tbody></table></div></div></div>
     </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 <script>
-    // Universal data loader function to map keys automatically
     async function loadTableData(fileUrl, tableId) {
         const table = document.getElementById(tableId);
         try {
@@ -97,13 +57,10 @@
                 return;
             }
 
-            // Dynamically discover columns based on your Excel sheet headers
             const headers = Object.keys(data[0]);
             
             let headerHTML = '<tr class="table-dark">';
-            headers.forEach(header => {
-                headerHTML += `<th>${header}</th>`;
-            });
+            headers.forEach(header => { headerHTML += `<th>${header}</th>`; });
             headerHTML += '</tr>';
             table.querySelector('thead').innerHTML = headerHTML;
 
@@ -120,15 +77,18 @@
 
         } catch (error) {
             console.error(`Error processing layout for ${fileUrl}:`, error);
-            table.innerHTML = `<thead><tr><th class="text-danger">⚠️ Failed to display data layer (${error.message})</th></tr></thead>`;
+            table.innerHTML = `<thead><tr><th class="text-danger">⚠️ Failed to load data layer (${error.message})</th></tr></thead>`;
         }
     }
 
-    // Initialize all tables on startup pointing directly to your fresh JSON files
     document.addEventListener("DOMContentLoaded", () => {
+        loadTableData('data/summary.json', 'table-summary');
         loadTableData('data/cocks.json', 'table-cocks');
         loadTableData('data/hens.json', 'table-hens');
         loadTableData('data/pairs.json', 'table-pairs');
+        loadTableData('data/chicks.json', 'table-chicks');
+        loadTableData('data/byround.json', 'table-round');
+        loadTableData('data/bymonth.json', 'table-month');
         loadTableData('data/race_performance.json', 'table-race');
     });
 </script>

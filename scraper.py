@@ -5,6 +5,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import time
+from datetime import datetime
 
 # Configuration
 SPREADSHEET_ID = "1ulog31dbsBRfzdl_zNMroCBNwdKh89HwOfXPSEoIDLk"
@@ -105,6 +106,19 @@ def process_pigeon_data():
 
     # 2. RUN EXTRACTION AND MATCH LEDGER ENTRIES
     all_races = get_all_api_races()
+    
+    # Sort races by date descending before pulling arrivals so newest stays at top
+    def parse_race_date(race_obj):
+        d_str = race_obj.get('date', '')
+        try:
+            # Assumes format 'DD.MM.YYYY' or 'DD/MM/YYYY'
+            normalized = d_str.replace('/', '.')
+            return datetime.strptime(normalized, '%d.%m.%Y')
+        except:
+            return datetime.min
+
+    all_races.sort(key=parse_race_date, reverse=True)
+
     performance_matrix = [["RaceID", "Date", "RaceName", "FederationTotalBirds", "LoftTotalBirds", "ChickID", "Distance_km", "Speed_mpm", "FederationPos", "LoftPos", "RaceIndex_calc", "LoftRaced In"]]
     row_counter = 2
 
@@ -112,15 +126,12 @@ def process_pigeon_data():
         arrivals = scrape_api_arrivals(race['id'])
         if not arrivals: continue
         
-        # Isolate every single bird clocked by George to figure out his accurate total and rank order
         georges_arrivals = [bird for bird in arrivals if bird["Fancier"] == TARGET_LOFT]
         loft_total_birds = len(georges_arrivals)
         
         if loft_total_birds > 0:
-            # Sort George's birds by speed descending to establish true internal loft positions
             georges_arrivals.sort(key=lambda x: float(x["Speed"]) if x["Speed"].replace('.','',1).isdigit() else 0.0, reverse=True)
             
-            # Map ranks out dynamically
             for internal_idx, bird in enumerate(georges_arrivals):
                 loft_pos = internal_idx + 1
                 benz_id = bird["PigeonID"].upper()
@@ -135,7 +146,6 @@ def process_pigeon_data():
                             matched_chick_id = master_id
                             break
                 
-                # Append row ONLY if this specific bird is part of your Chicks inventory team
                 if matched_chick_id:
                     formula_string = f'=IFERROR(((D{row_counter} - I{row_counter} + 1)/D{row_counter} + (E{row_counter} - J{row_counter} + 1)/E{row_counter})/2,"")'
                     performance_matrix.append([
@@ -158,7 +168,7 @@ def process_pigeon_data():
     if len(performance_matrix) > 1:
         perf_sheet.format(f"K2:K{len(performance_matrix)}", {"numberFormat": {"type": "PERCENT", "pattern": "0.00%"}})
         
-    print(f"✅ 'RacePerformance' ledger completely rebuilt for {TARGET_LOFT}. Rows synced: {len(performance_matrix) - 1}")
+    print(f"✅ 'RacePerformance' ledger completely rebuilt. Rows synced: {len(performance_matrix) - 1}")
 
     # 4. DOWNLOAD CACHE DATA FOR APP EXPORT
     sheets_to_load = ["Chicks", "Cocks", "Hens", "Pairs", "ByRound", "ByMonth", "Summary", "RacePerformance"]

@@ -97,7 +97,7 @@ def scrape_api_arrivals(race_id, race_name):
                 })
                 page_count += 1
                 
-            print(f"🎯 Extracted {page_count} rows from page {page.")
+            print(f"🎯 Extracted {page_count} rows from page {page}.")
             
             if page_count < limit:
                 break

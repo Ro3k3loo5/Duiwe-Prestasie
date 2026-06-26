@@ -68,21 +68,34 @@ def scrape_individual_race(url):
         # Clean up any leftover menu navigation text from the header string
         race_name = race_name.replace("Races", "").replace("-", "").strip()
 
-        for row in rows:
-            cells = row.find_all('td')
-            if len(cells) >= 6:
-                text_data = [c.text.strip() for c in cells]
-                records.append({
-                    "Race": race_name,
-                    "Nom": text_data[0],
-                    "Fancier": text_data[1],
-                    "PigeonID": text_data[2],
-                    "Arrival": text_data[3],
-                    "Speed": text_data[4],
-                    "Distance": text_data[5]
-                })
-    except Exception as e:
-        print(f"⚠️ Error pulling table from {url}: {e}")
+# 1. DOWNLOAD SYSTEM DATA ROWS FOR INTERFACE (Force reading despite duplicate header blocks)
+    sheets_to_load = ["RacePerformance", "Chicks", "Cocks", "Hens", "Pairs", "ByRound", "ByMonth", "Summary"]
+    data_maps = {}
+    
+    for s_name in sheets_to_load:
+        try:
+            worksheet = spreadsheet.worksheet(s_name)
+            # Use get_all_values instead of get_all_records to completely bypass header check crashing
+            all_rows = worksheet.get_all_values()
+            if len(all_rows) > 0:
+                headers = [str(h).strip() if h else f"EmptyHeader_{i}" for i, h in enumerate(all_rows[0])]
+                # If a header is duplicated, make it unique dynamically
+                seen = {}
+                for idx, h in enumerate(headers):
+                    if h in seen:
+                        seen[h] += 1
+                        headers[idx] = f"{h}_{seen[h]}"
+                    else:
+                        seen[h] = 0
+                
+                df = pd.DataFrame(all_rows[1:], columns=headers)
+                data_maps[s_name] = df.fillna("")
+                print(f"✅ Downloaded current tab successfully: {s_name}")
+            else:
+                data_maps[s_name] = pd.DataFrame()
+        except Exception as e:
+            print(f"⚠️ Tracking warning on sheet '{s_name}': {e}")
+            data_maps[s_name] = pd.DataFrame())
     return records
 
 def process_pigeon_data():

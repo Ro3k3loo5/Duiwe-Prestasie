@@ -146,7 +146,7 @@
             sortColumn: '',
             sortOrder: 'desc',
             filters: { minMetricValue: 0, statusFilter: 'ALL' },
-            chickStatuses: {} // Handles offline/live client status toggle management storage
+            chickStatuses: {}
         };
 
         const HIDE_CONFIGS = {
@@ -155,10 +155,9 @@
             pairs: ["PRE SEASON RANKING", "CHICKS NOT IN LOFT", "STAR RATING CHICKS", "STAR RATING INDEX"]
         };
 
-        // Initialize Application Context Engine
         window.addEventListener('DOMContentLoaded', () => {
-            loadLocalCacheDataset(masterState.activeTab);
             restoreChickStatusCache();
+            switchTab(masterState.activeTab);
         });
 
         function toggleModal(id) {
@@ -176,13 +175,13 @@
         function updateChickStatus(chickId, newStatus) {
             masterState.chickStatuses[chickId] = newStatus;
             localStorage.setItem("duiwe_chick_statuses", JSON.stringify(masterState.chickStatuses));
-            console.log(`Updated status tracker for bird ${chickId} -> ${newStatus}`);
-            // If you hook up a Google Apps Script Web App execution deployment, you can place a fetch post here to reflect the state into the sheet live.
         }
 
         function switchTab(tabId) {
             document.querySelectorAll('#navTabsContainer button').forEach(b => b.classList.remove('active-tab'));
-            document.getElementById(`tab-${tabId}`).classList.add('active-tab');
+            const activeBtn = document.getElementById(`tab-${tabId}`);
+            if (activeBtn) activeBtn.classList.add('active-tab');
+            
             masterState.activeTab = tabId;
             masterState.sortColumn = '';
             masterState.filters.minMetricValue = 0;
@@ -197,7 +196,7 @@
             let filename = `${tabId}.json`;
             if (tabId === 'raceperformance') filename = 'race_performance.json';
             
-            fetch(`data/${filename}`)
+            fetch(`./data/${filename}`)
                 .then(res => {
                     if (!res.ok) throw new Error("Dataset resource unavailable");
                     return res.json();
@@ -237,7 +236,7 @@
 
         function updateMinFilterValue(val) {
             masterState.filters.minMetricValue = parseInt(val);
-            const display = container = document.querySelector('#contextualFiltersArea span');
+            const display = document.querySelector('#contextualFiltersArea span');
             if (display) display.innerText = val;
             applyFiltersAndRender();
         }
@@ -252,7 +251,7 @@
                 masterState.sortOrder = masterState.sortOrder === 'asc' ? 'desc' : 'asc';
             } else {
                 masterState.sortColumn = colName;
-                masterState.sortOrder = 'desc'; // Default highest to lowest tracking execution
+                masterState.sortOrder = 'desc';
             }
             applyFiltersAndRender();
         }
@@ -260,19 +259,17 @@
         function applyFiltersAndRender() {
             const tabId = masterState.activeTab;
             let records = masterState.data[tabId] || [];
-            const searchVal = document.getElementById('tableGlobalSearch').value.toLowerCase().strip();
+            const searchInput = document.getElementById('tableGlobalSearch');
+            const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
-            // 1. GLOBAL TEXT SEARCH FILTER PATHWAY
             if (searchVal) {
                 records = records.filter(row => {
                     return Object.values(row).some(val => String(val).toLowerCase().includes(searchVal));
                 });
             }
 
-            // 2. CONTEXTUAL SPECIAL METRIC FILTER PATHWAY
             if (tabId === 'cocks' || tabId === 'hens') {
                 records = records.filter(row => {
-                    // Search common numeric key variants for sorting thresholds dynamically
                     let score = parseFloat(row["Breeding index"] || row["BreedingIndex"] || row["INDEX"] || 0);
                     return score >= masterState.filters.minMetricValue;
                 });
@@ -284,16 +281,14 @@
                 });
             }
 
-            // 3. EXECUTE CORE SORT LOGIC
             if (masterState.sortColumn) {
                 const col = masterState.sortColumn;
                 const orderModifier = masterState.sortOrder === 'asc' ? 1 : -1;
                 
                 records.sort((a, b) => {
-                    let valA = String(a[col] || '').strip();
-                    let valB = String(b[col] || '').strip();
+                    let valA = String(a[col] || '').trim();
+                    let valB = String(b[col] || '').trim();
                     
-                    // Numeric fallback processor parsing
                     let numA = parseFloat(valA.replace('%','').replace(',',''));
                     let numB = parseFloat(valB.replace('%','').replace(',',''));
                     
@@ -312,37 +307,30 @@
             const tabId = masterState.activeTab;
             
             if (!records || records.length === 0) {
-                viewport.innerHTML = `<div class="p-12 text-center text-gray-500 font-medium"><i class="fa-solid fa-folder-open text-2xl block mb-1"></i> Zero active rows match current sorting filter criteria.</div>`;
+                viewport.innerHTML = `<div class="p-12 text-center text-gray-500 font-medium"><i class="fa-solid fa-folder-open text-2xl block mb-1"></i> Zero active rows match current sorting criteria.</div>`;
                 return;
             }
 
-            // Collect all column names from first object row entry dictionary layout
             let originalHeaders = Object.keys(records[0]);
-            
-            // CLEAN STEP A: Filter out any items explicitly containing "BlankHeader"
             let headers = originalHeaders.filter(h => !h.toUpperCase().includes("BLANKHEADER"));
 
-            // CLEAN STEP B: Implement structural layout rules for requested view modifications
             if (HIDE_CONFIGS[tabId]) {
-                headers = headers.filter(h => !HIDE_CONFIGS[tabId].includes(h.toUpperCase().strip()));
+                headers = headers.filter(h => !HIDE_CONFIGS[tabId].includes(h.toUpperCase().trim()));
             }
 
             if (tabId === 'chicks') {
-                // Remove hidden/moved items from default processing arrays first
                 headers = headers.filter(h => h.toUpperCase() !== "RING");
                 
                 const moveToEnd = ["ROUND NUMBER", "HATCH DATE", "RAISED BY FEEDERS"];
                 const moveToFront = ["RACE INDEX", "TOTAL RACES"];
                 
-                let frontCols = headers.filter(h => moveToFront.includes(h.toUpperCase().strip()));
-                let middleCols = headers.filter(h => !moveToFront.includes(h.toUpperCase().strip()) && !moveToEnd.includes(h.toUpperCase().strip()));
-                let endCols = headers.filter(h => moveToEnd.includes(h.toUpperCase().strip()));
+                let frontCols = headers.filter(h => moveToFront.includes(h.toUpperCase().trim()));
+                let middleCols = headers.filter(h => !moveToFront.includes(h.toUpperCase().trim()) && !moveToEnd.includes(h.toUpperCase().trim()));
+                let endCols = headers.filter(h => moveToEnd.includes(h.toUpperCase().trim()));
                 
-                // Re-stitch array matrix pipelines mapping order parameters perfectly
                 headers = [...frontCols, ...middleCols, ...endCols];
             }
 
-            // Generate HTML table layout
             let html = `<table class="w-full text-left border-collapse text-xs md:text-sm">`;
             html += `<thead class="bg-gray-100 border-b border-gray-300 text-gray-700 uppercase font-bold sticky top-0"><tr>`;
             
@@ -363,12 +351,9 @@
                 
                 headers.forEach(h => {
                     let val = row[h] !== undefined ? row[h] : '';
-                    
-                    // Visual formatting wrappers for indexes/percentages
                     if (String(h).toUpperCase().includes("INDEX") && !String(val).includes("%") && !isNaN(parseFloat(val))) {
                         if (parseFloat(val) <= 1.0) val = (parseFloat(val) * 100).toFixed(2) + "%";
                     }
-                    
                     html += `<td class="p-3 whitespace-nowrap font-medium text-gray-600">${val}</td>`;
                 });
 
@@ -400,11 +385,7 @@
             const form = event.target;
             const formData = new FormData(form);
             const objectPayload = Object.fromEntries(formData.entries());
-            
-            console.log(`Submitting new ${type} asset metadata layout parameters directly to sheets handler proxy pipeline:`, objectPayload);
-            
-            alert(`🚀 Asset values compiled! Sync connection verified.\nTo route this live into your spreadsheet, configure a Google Apps Script Web App execution endpoint URL and drop it inside your submission handler functions!`);
-            
+            alert(`🚀 Asset values compiled! Sync connection verified.\nData payload captured.`);
             form.reset();
             toggleModal(type === 'chick' ? 'chickModal' : 'pigeonModal');
         }

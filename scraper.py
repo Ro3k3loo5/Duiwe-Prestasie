@@ -77,9 +77,8 @@ def process_pigeon_data():
     gc = get_google_sheets_client()
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     
-    # 1. INDEX MASTER RINGS WITH DUAL-PATH MATCHING MAPS
-    pigeon_lookup_map = {} # Maps a clean identifier string to your master ChickID
-    
+    # 1. INDEX MASTER RINGS
+    pigeon_lookup_map = {}
     try:
         chicks_sheet = spreadsheet.worksheet("Chicks")
         chicks_raw = chicks_sheet.get_all_values()
@@ -92,19 +91,13 @@ def process_pigeon_data():
                 if len(row) > chick_id_idx:
                     full_chick_id = str(row[chick_id_idx]).strip()
                     if not full_chick_id: continue
-                    
-                    # Map the full ID directly (normalized for dashes/spaces)
                     norm_full = full_chick_id.replace("-", "").replace(" ", "").upper()
                     pigeon_lookup_map[norm_full] = full_chick_id
                     
-                    # Also map the short ring number as a fallback if available
                     if ring_idx != -1 and len(row) > ring_idx:
                         short_ring = str(row[ring_idx]).strip()
                         if short_ring:
-                            norm_short = short_ring.upper()
-                            pigeon_lookup_map[norm_short] = full_chick_id
-                            
-        print(f"💎 Inventory indexing completed. Generated {len(pigeon_lookup_map)} lookup keys from 'Chicks'.")
+                            pigeon_lookup_map[short_ring.upper()] = full_chick_id
     except Exception as e:
         print(f"❌ Inventory Load Error: {e}")
         return
@@ -122,18 +115,13 @@ def process_pigeon_data():
         for bird in arrivals:
             benz_id = bird["PigeonID"].upper()
             benz_id_clean = benz_id.replace("-", "").replace(" ", "")
-            
             matched_chick_id = None
             
-            # Check full string match path
             if benz_id_clean in pigeon_lookup_map:
                 matched_chick_id = pigeon_lookup_map[benz_id_clean]
             else:
-                # Check if the Benzing string ends with one of your short ring IDs
                 for key, master_id in pigeon_lookup_map.items():
-                    # If key is short (e.g. '518') and benz_id ends with it (e.g. '...3518' or '-518')
                     if len(key) <= 5 and (benz_id.endswith("-" + key) or benz_id.endswith(" " + key) or benz_id == key):
-                        # Verify it belongs to your prefix configuration safely
                         matched_chick_id = master_id
                         break
             
@@ -143,7 +131,6 @@ def process_pigeon_data():
         
         loft_total_birds = len(my_clocked_birds)
         if loft_total_birds > 0:
-            print(f"🚀 Match Found! {race['name']} -> Clocked {loft_total_birds} of your birds.")
             my_clocked_birds.sort(key=lambda x: float(x["Speed"]) if x["Speed"].replace('.','',1).isdigit() else 0.0, reverse=True)
             
             for loft_idx, bird in enumerate(my_clocked_birds):
@@ -156,10 +143,23 @@ def process_pigeon_data():
                 ])
                 row_counter += 1
 
-    # 3. WRITE TO SHEET
+    # 3. OVERWRITE RACEPERFORMANCE SHEET SAFELY WITHOUT DESTROYING CELLS
     perf_sheet = spreadsheet.worksheet("RacePerformance")
-    perf_sheet.clear()
-    perf_sheet.update(range_name='A1', values=performance_matrix)
+    
+    # Clear using batch update range values to preserve cross-sheet summary calculations
+    perf_sheet.batch_clear(["A1:L2000"])
+    
+    # Update spreadsheet using raw value input option so formulas evaluate instantly
+    perf_sheet.update(
+        range_name='A1', 
+        values=performance_matrix, 
+        value_input_option='USER_ENTERED'
+    )
+    
+    # Format the entire RaceIndex_calc column (Column K) as a percentage layout
+    if len(performance_matrix) > 1:
+        perf_sheet.format(f"K2:K{len(performance_matrix)}", {"numberFormat": {"type": "PERCENT", "pattern": "0.00%"}})
+        
     print(f"✅ 'RacePerformance' ledger completely rebuilt. Total rows synced: {len(performance_matrix) - 1}")
 
     # 4. DOWNLOAD CACHE DATA FOR APP EXPORT

@@ -29,41 +29,20 @@ def get_all_api_races():
             print(f"❌ API Rejected request. Status: {response.status_code}")
             return race_list
         
-        # --- DIAGNOSTIC PRINT ---
-        # This logs the exact layout Benzing sends back so we can map keys perfectly
         raw_json = response.json()
-        print("====== RAW BENZING API DATA RESPONSE ======")
-        print(json.dumps(raw_json, indent=2)[:3000])
-        print("===========================================")
         
-        # Attempt defensive nested parsing loops
-        races_data = []
-        if isinstance(raw_json, list):
-            races_data = raw_json
-        elif isinstance(raw_json, dict):
-            # Check common key wrappers
-            for key in ['data', 'races', 'result', 'flights', 'smartclub']:
-                if key in raw_json:
-                    if isinstance(raw_json[key], list):
-                        races_data = raw_json[key]
-                        break
-                    elif isinstance(raw_json[key], dict) and 'races' in raw_json[key]:
-                        races_data = raw_json[key]['races']
-                        break
-            if not races_data and 'races' not in raw_json:
-                # If it's a flat dict with multiple items, check if it's iterable
-                races_data = raw_json.get('data', [])
-
+        # Target Benzing's exact structural wrapper key
+        races_data = raw_json.get('clubRaces', [])
+        
         for race in races_data:
-            if isinstance(race, dict):
-                race_id = race.get('id') or race.get('race_id') or race.get('club_race_id')
-                race_name = race.get('name') or race.get('station_name') or race.get('title')
-                
-                if race_id and race_name:
-                    race_list.append({
-                        'id': str(race_id),
-                        'name': str(race_name).strip()
-                    })
+            race_id = race.get('id')
+            race_name = race.get('raceName')
+            
+            if race_id and race_name:
+                race_list.append({
+                    'id': str(race_id),
+                    'name': str(race_name).strip()
+                })
                 
         print(f"📋 API Schedule Scan Found {len(race_list)} total races.")
     except Exception as e:
@@ -87,6 +66,8 @@ def scrape_api_arrivals(race_id, race_name):
                 break
                 
             data = response.json()
+            
+            # Support both flat list arrays or dictionary payloads
             arrivals = data if isinstance(data, list) else data.get('arrivals', data.get('data', []))
             
             if not arrivals or len(arrivals) == 0:
@@ -95,12 +76,17 @@ def scrape_api_arrivals(race_id, race_name):
                 
             page_count = 0
             for item in arrivals:
-                # Dynamically extract values based on raw Benzing field patterns
-                fancier = item.get('fancier_name') or item.get('fancier', {}).get('name', 'Unknown')
-                pigeon_id = item.get('pigeon_id') or item.get('pigeon_ring') or item.get('ring_number') or item.get('pigeon', {}).get('ring', 'Unknown')
-                arrival_time = item.get('arrival_time') or item.get('arrival', '00:00:00')
-                speed = item.get('speed') or item.get('m_min', '0.000')
-                distance = item.get('distance') or item.get('km', '0.000')
+                # Direct object unpacking with deep path fallbacks
+                fancier = item.get('fancierName') or item.get('fancier_name') or item.get('fancier', {}).get('name', 'Unknown')
+                pigeon_id = item.get('pigeonHtmlRing') or item.get('ringNumber') or item.get('pigeonId') or 'Unknown'
+                
+                # strip any HTML formatting tags if Benzing packs them inside pigeonHtmlRing
+                if "<" in str(pigeon_id):
+                    pigeon_id = str(pigeon_id).split('>')[-2].split('<')[0].strip() if '>' in str(pigeon_id) else pigeon_id
+                
+                arrival_time = item.get('arrivalTime') or item.get('arrivalTimeStr') or '00:00:00'
+                speed = item.get('speed') or item.get('speedStr') or '0.000'
+                distance = item.get('distance') or '0.000'
                 
                 raw_records.append({
                     "Fancier": str(fancier).strip(),
@@ -111,9 +97,8 @@ def scrape_api_arrivals(race_id, race_name):
                 })
                 page_count += 1
                 
-            print(f"🎯 Extracted {page_count} rows from page {page}.")
+            print(f"🎯 Extracted {page_count} rows from page {page.")
             
-            # If the page returned fewer items than the limit, we've reached the final page
             if page_count < limit:
                 break
                 
@@ -131,7 +116,7 @@ def process_pigeon_data():
     gc = get_google_sheets_client()
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     
-    # 1. PRESERVE AND DOWNLOAD SYSTEM DASHBOARD INTERFACES
+    # 1. DOWNLOAD INTERFACE CACHE VALUES
     sheets_to_load = ["RacePerformance", "Chicks", "Cocks", "Hens", "Pairs", "ByRound", "ByMonth", "Summary"]
     data_maps = {}
     

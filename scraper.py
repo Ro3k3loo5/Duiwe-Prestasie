@@ -29,22 +29,41 @@ def get_all_api_races():
             print(f"❌ API Rejected request. Status: {response.status_code}")
             return race_list
         
-        # Parse the raw API data package
-        data = response.json()
+        # --- DIAGNOSTIC PRINT ---
+        # This logs the exact layout Benzing sends back so we can map keys perfectly
+        raw_json = response.json()
+        print("====== RAW BENZING API DATA RESPONSE ======")
+        print(json.dumps(raw_json, indent=2)[:3000])
+        print("===========================================")
         
-        # Navigate through Benzing's data structure
-        # (Handling standard lists or nested dictionary setups safely)
-        races_data = data if isinstance(data, list) else data.get('data', [])
-        
+        # Attempt defensive nested parsing loops
+        races_data = []
+        if isinstance(raw_json, list):
+            races_data = raw_json
+        elif isinstance(raw_json, dict):
+            # Check common key wrappers
+            for key in ['data', 'races', 'result', 'flights', 'smartclub']:
+                if key in raw_json:
+                    if isinstance(raw_json[key], list):
+                        races_data = raw_json[key]
+                        break
+                    elif isinstance(raw_json[key], dict) and 'races' in raw_json[key]:
+                        races_data = raw_json[key]['races']
+                        break
+            if not races_data and 'races' not in raw_json:
+                # If it's a flat dict with multiple items, check if it's iterable
+                races_data = raw_json.get('data', [])
+
         for race in races_data:
-            race_id = race.get('id') or race.get('race_id')
-            race_name = race.get('name') or race.get('station_name')
-            
-            if race_id and race_name:
-                race_list.append({
-                    'id': str(race_id),
-                    'name': str(race_name).strip()
-                })
+            if isinstance(race, dict):
+                race_id = race.get('id') or race.get('race_id') or race.get('club_race_id')
+                race_name = race.get('name') or race.get('station_name') or race.get('title')
+                
+                if race_id and race_name:
+                    race_list.append({
+                        'id': str(race_id),
+                        'name': str(race_name).strip()
+                    })
                 
         print(f"📋 API Schedule Scan Found {len(race_list)} total races.")
     except Exception as e:

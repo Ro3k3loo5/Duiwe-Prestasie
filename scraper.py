@@ -28,39 +28,28 @@ def get_all_season_race_slugs(races_url):
     race_list = []
     try:
         response = requests.get(races_url, headers=headers, timeout=15)
-        if response.status_code != 200: 
-            print(f"❌ Failed to load page. Status code: {response.status_code}")
-            return race_list
+        if response.status_code != 200: return race_list
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # --- DIAGNOSTIC PRINT ---
-        # This will print the first 2000 characters of the page code to your GitHub log
-        print("====== BENZING RAW HTML SNIPPET ======")
-        print(response.text[:2000])
-        print("======================================")
-        
-        # Broad-spectrum scan: Look for ANY link containing a race identifier
         links_found = soup.find_all('a', href=True)
-        print(f"DEBUG: Found {len(links_found)} total hyperlinks on the raw page.")
         
+        print(f"DEBUG: Found {len(links_found)} total hyperlinks on the page.")
+        print("====== LIST OF ALL LINKS FOUND ======")
+        for i, a_tag in enumerate(links_found):
+            print(f"Link #{i+1}: Text: '{a_tag.get_text().strip()}' | Href: '{a_tag['href']}'")
+        print("=====================================")
+        
+        # Keep the rest of the loop simple for now
         for a_tag in links_found:
             href = a_tag['href']
-            # Broadened matching pattern to catch any variant of results or race IDs
-            if "r-" in href or "results" in href:
-                match = re.search(r'/(r-\d+-[^/]+)/', href) or re.search(r'/results/([^/]+)/', href)
+            if "r-" in href or "flight" in href or "race" in href:
+                match = re.search(r'/([^/]+)/?$', href.strip('/'))
                 if match:
                     slug = match.group(1)
-                    # Skip common structural system links
-                    if slug in ['2026', 'en', 'za', 'races', 'dashboard']: continue
-                    
-                    raw_text = a_tag.get_text().strip()
-                    race_name = raw_text.split('\n')[0].strip() if raw_text else slug
-                    
-                    if not any(r['slug'] == slug for r in race_list):
-                        race_list.append({'slug': slug, 'name': race_name})
+                    if slug not in ['races', 'dashboard', '2026', 'en', 'za']:
+                        race_list.append({'slug': href, 'name': a_tag.get_text().strip() or slug})
                             
-        print(f"📋 Refined Scan Found {len(race_list)} total scheduled season races.")
+        print(f"📋 Refined Scan Found {len(race_list)} matches.")
     except Exception as e:
         print(f"⚠️ Failed parsing calendar slugs: {e}")
     return race_list

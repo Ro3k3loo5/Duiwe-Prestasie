@@ -25,33 +25,42 @@ def get_google_sheets_client():
 def get_all_season_race_slugs(races_url):
     print("🔍 Harvesting all scheduled races from the main calendar page...")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    race_list = [] # List of dictionaries holding slug and readable name
+    race_list = []
     try:
         response = requests.get(races_url, headers=headers, timeout=15)
-        if response.status_code != 200: return race_list
+        if response.status_code != 200: 
+            print(f"❌ Failed to load page. Status code: {response.status_code}")
+            return race_list
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Scan every link on the calendar layout
-        for a_tag in soup.find_all('a', href=True):
+        # --- DIAGNOSTIC PRINT ---
+        # This will print the first 2000 characters of the page code to your GitHub log
+        print("====== BENZING RAW HTML SNIPPET ======")
+        print(response.text[:2000])
+        print("======================================")
+        
+        # Broad-spectrum scan: Look for ANY link containing a race identifier
+        links_found = soup.find_all('a', href=True)
+        print(f"DEBUG: Found {len(links_found)} total hyperlinks on the raw page.")
+        
+        for a_tag in links_found:
             href = a_tag['href']
-            # Match the pattern you identified: e.g., /results/2026/r-6317-middelburg-1/
-            match = re.search(r'/(r-\d+-[^/]+)/', href)
-            if match:
-                slug = match.group(1)
-                # Clean up the display name from the inner tag text
-                raw_text = a_tag.get_text().strip()
-                race_name = raw_text.split('\n')[0].strip() if raw_text else slug
-                # Fallback clean up if text extraction is muddy
-                if not race_name or "results" in race_name.lower():
-                    race_name = slug.replace("r-", "").replace("-", " ").title()
-                    race_name = re.sub(r'^\d+\s+', '', race_name).strip()
-                
-                # Deduplicate slugs
-                if not any(r['slug'] == slug for r in race_list):
-                    race_list.append({'slug': slug, 'name': race_name})
+            # Broadened matching pattern to catch any variant of results or race IDs
+            if "r-" in href or "results" in href:
+                match = re.search(r'/(r-\d+-[^/]+)/', href) or re.search(r'/results/([^/]+)/', href)
+                if match:
+                    slug = match.group(1)
+                    # Skip common structural system links
+                    if slug in ['2026', 'en', 'za', 'races', 'dashboard']: continue
+                    
+                    raw_text = a_tag.get_text().strip()
+                    race_name = raw_text.split('\n')[0].strip() if raw_text else slug
+                    
+                    if not any(r['slug'] == slug for r in race_list):
+                        race_list.append({'slug': slug, 'name': race_name})
                             
-        print(f"📋 Found {len(race_list)} total scheduled season races on the board.")
+        print(f"📋 Refined Scan Found {len(race_list)} total scheduled season races.")
     except Exception as e:
         print(f"⚠️ Failed parsing calendar slugs: {e}")
     return race_list

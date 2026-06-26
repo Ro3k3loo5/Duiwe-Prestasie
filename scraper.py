@@ -26,22 +26,23 @@ def get_all_api_races():
     try:
         response = requests.get(BENZING_API_RACES_URL, headers=headers, timeout=15)
         if response.status_code != 200:
-            print(f"❌ API Rejected request. Status: {response.status_code}")
             return race_list
         
         raw_json = response.json()
-        
-        # Target Benzing's exact structural wrapper key
         races_data = raw_json.get('clubRaces', [])
         
         for race in races_data:
             race_id = race.get('id')
             race_name = race.get('raceName')
+            race_date = race.get('raceDate', '')
+            total_birds = race.get('numberOfPigeons', 0)
             
             if race_id and race_name:
                 race_list.append({
                     'id': str(race_id),
-                    'name': str(race_name).strip()
+                    'name': str(race_name).strip(),
+                    'date': race_date,
+                    'total_fed_birds': total_birds
                 })
                 
         print(f"📋 API Schedule Scan Found {len(race_list)} total races.")
@@ -49,17 +50,14 @@ def get_all_api_races():
         print(f"⚠️ Failed reading API schedule: {e}")
     return race_list
 
-def scrape_api_arrivals(race_id, race_name):
-    print(f"🌐 Deep pulling arrivals from API for: {race_name} (ID: {race_id})")
+def scrape_api_arrivals(race_id):
     headers = {'User-Agent': 'Mozilla/5.0'}
-    raw_records = []
+    all_arrivals = []
     page = 1
     limit = 50
 
     while True:
         target_url = f"https://mypigeons.benzing.live/api/v2/za/club-races/{race_id}/on-the-fly/arrivals?page_number={page}&limit={limit}"
-        print(f"📄 Requesting Page {page} -> {target_url}")
-        
         try:
             response = requests.get(target_url, headers=headers, timeout=15)
             if response.status_code != 200:
@@ -68,105 +66,131 @@ def scrape_api_arrivals(race_id, race_name):
             data = response.json()
             arrivals = data if isinstance(data, list) else data.get('arrivals', [])
             
-            if not arrivals or len(arrivals) == 0:
-                print(f"🏁 No records found on page {page}. Finishing race collection.")
+            if not arrivals:
                 break
                 
-            page_count = 0
-            for item in arrivals:
-                # Direct object unpacking using exact properties from your JSON trace
-                fancier = item.get('fancier_name', 'Unknown')
-                pigeon_id = item.get('pigeon_string', 'Unknown')
-                arrival_time = item.get('time_of_arrival', '00:00:00')
-                speed = item.get('speed', '0.000')
-                distance = item.get('distance', '0.000')
+            for index, item in enumerate(arrivals):
+                # Calculate absolute federation position based on page and index
+                fed_pos = ((page - 1) * limit) + (index + 1)
                 
-                raw_records.append({
-                    "Fancier": str(fancier).strip(),
-                    "PigeonID": str(pigeon_id).strip(),
-                    "Arrival": str(arrival_time).strip(),
-                    "Speed": str(speed).strip(),
-                    "Distance": str(distance).strip()
+                all_arrivals.append({
+                    "Fancier": str(item.get('fancier_name', 'Unknown')).strip(),
+                    "PigeonID": str(item.get('pigeon_string', 'Unknown')).strip(),
+                    "Arrival": str(item.get('time_of_arrival', '00:00:00')).strip(),
+                    "Speed": str(item.get('speed', '0.000')).strip(),
+                    "Distance": str(item.get('distance', '0.000')).strip(),
+                    "FedPos": fed_pos
                 })
-                page_count += 1
                 
-            print(f"🎯 Extracted {page_count} rows from page {page}.")
-            
-            if page_count < limit:
+            if len(arrivals) < limit:
                 break
-                
             page += 1
-            time.sleep(0.3)
-            
+            time.sleep(0.1)
         except Exception as e:
-            print(f"⚠️ Error parsing arrivals api payload on page {page}: {e}")
+            print(f"⚠️ Error pulling pages: {e}")
             break
             
-    return raw_records
+    return all_arrivals
 
 def process_pigeon_data():
     print("⚙️ Initiating Two-Way Cloud Sync Engine...")
     gc = get_google_sheets_client()
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     
-    # 1. DOWNLOAD INTERFACE CACHE VALUES
-    sheets_to_load = ["RacePerformance", "Chicks", "Cocks", "Hens", "Pairs", "ByRound", "ByMonth", "Summary"]
+    # 1. READ MASTER RING NUMBERS FROM CHICKS SHEET
+    try:
+        chicks_sheet = spreadsheet.worksheet("Chicks")
+        chicks_rows = chicks_sheet.get_all_records()
+        # Create a set of your active ring numbers for fast lookup mapping
+        my_birds_rings = {str(row.get('Ring', row.get('ChickID', ''))).strip() for row in chicks_rows if row.get('Ring') or row.get('ChickID')}
+        print(f"💎 Successfully indexed {len(my_birds_rings)} master rings from 'Chicks' sheet.")
+    except Exception as e:
+        print(f"❌ Critical error loading your bird inventory from 'Chicks': {e}")
+        return
+
+    # 2. CACHE DASHBOARD LAYOUTS FOR BACKEND EXPORTS
+    sheets_to_load = ["Chicks", "Cocks", "Hens", "Pairs", "ByRound", "ByMonth", "Summary"]
     data_maps = {}
-    
     for s_name in sheets_to_load:
         try:
             worksheet = spreadsheet.worksheet(s_name)
             all_rows = worksheet.get_all_values()
             if len(all_rows) > 0:
                 headers = [str(h).strip() if h else f"EmptyHeader_{i}" for i, h in enumerate(all_rows[0])]
-                seen = {}
-                for idx, h in enumerate(headers):
-                    if h in seen:
-                        seen[h] += 1
-                        headers[idx] = f"{h}_{seen[h]}"
-                    else:
-                        seen[h] = 0
                 df = pd.DataFrame(all_rows[1:], columns=headers)
                 data_maps[s_name] = df.fillna("")
-            else:
-                data_maps[s_name] = pd.DataFrame()
-        except Exception as e:
-            data_maps[s_name] = pd.DataFrame()
+        except:
+            pass
 
-    # 2. RUN FULL SCHEDULE RAW EXTRACTION VIA DISCOVERED API LINKS
+    # 3. HARVEST AND COMPILE MATCHING RACE LEDGER ENTRIES
     all_races = get_all_api_races()
+    performance_matrix = []
+    
+    # Header definition matching your exact layout
+    performance_matrix.append([
+        "RaceID", "Date", "RaceName", "FederationTotalBirds", "LoftTotalBirds", 
+        "ChickID", "Distance_km", "Speed_mpm", "FederationPos", "LoftPos", 
+        "RaceIndex_calc", "Loft"
+    ])
+    
+    row_counter = 2 # Starts at row 2 because line 1 is headings
     
     for race in all_races:
-        sheet_title = race['name'][:30].strip()
-        raw_data = scrape_api_arrivals(race['id'], race['name'])
+        arrivals = scrape_api_arrivals(race['id'])
+        if not arrivals:
+            continue
+            
+        # Filter down to only your birds found in the Chicks inventory list
+        my_clocked_birds = [bird for bird in arrivals if bird["PigeonID"] in my_birds_rings]
+        loft_total_birds = len(my_clocked_birds)
         
-        if raw_data:
-            print(f"🚀 Found {len(raw_data)} arrivals. Syncing directly to sheet: '{sheet_title}'")
+        if loft_total_birds > 0:
+            print(f"🚀 Match Found! {race['name']} -> Clocked {loft_total_birds} of your birds out of {len(arrivals)} total entries.")
             
-            try:
-                race_sheet = spreadsheet.worksheet(sheet_title)
-                race_sheet.clear()
-                print(f"🧹 Cleared old records from existing '{sheet_title}' worksheet.")
-            except gspread.exceptions.WorksheetNotFound:
-                race_sheet = spreadsheet.add_worksheet(title=sheet_title, rows="1000", cols="10")
-                print(f"🆕 Created brand new dedicated worksheet tab: '{sheet_title}'")
+            # Sort your birds by speed descending to correctly compute Loft Position
+            my_clocked_birds.sort(key=lambda x: float(x["Speed"]) if x["Speed"].replace('.','',1).isdigit() else 0.0, reverse=True)
             
-            sheet_matrix = [["Fancier", "PigeonID", "Arrival", "Speed", "Distance"]]
-            for bird in raw_data:
-                sheet_matrix.append([
-                    bird["Fancier"],
-                    bird["PigeonID"],
-                    bird["Arrival"],
-                    bird["Speed"],
-                    bird["Distance"]
-                ])
+            for loft_idx, bird in enumerate(my_clocked_birds):
+                loft_pos = loft_idx + 1
                 
-            race_sheet.update(range_name='A1', values=sheet_matrix)
-            print(f"✅ Sheet '{sheet_title}' raw upload completed successfully!")
-        else:
-            print(f"✨ '{race['name']}' returned 0 data points from API. Skipping sheet execution.")
+                # Dynamic formula string referencing the correct row index live
+                formula_string = f'=IFERROR(((D{row_counter} - I{row_counter} + 1)/D{row_counter} + (E{row_counter} - J{row_counter} + 1)/E{row_counter})/2,"")'
+                
+                performance_matrix.append([
+                    race['name'].upper().split()[0],       # RaceID (e.g., 'KOMGA')
+                    race['date'],                         # Date
+                    race['name'],                         # RaceName (e.g., 'Komga 1')
+                    int(race['total_fed_birds']),         # FederationTotalBirds (Col D)
+                    int(loft_total_birds),                # LoftTotalBirds (Col E)
+                    bird["PigeonID"],                     # ChickID
+                    float(bird["Distance"]),              # Distance_km
+                    float(bird["Speed"]),                 # Speed_mpm
+                    int(bird["FedPos"]),                  # FederationPos (Col I)
+                    int(loft_pos),                        # LoftPos (Col J)
+                    formula_string,                       # RaceIndex_calc Formula Text
+                    bird["Fancier"]                       # Loft (Fancier Name)
+                ])
+                row_counter += 1
 
-    # 3. COMPILING EXPORT FILES FOR APP VISUALIZATION LAYOUTS
+    # 4. OVERWRITE RACEPERFORMANCE SHEET
+    try:
+        perf_sheet = spreadsheet.worksheet("RacePerformance")
+        perf_sheet.clear()
+        perf_sheet.update(range_name='A1', values=performance_matrix)
+        print(f"✅ 'RacePerformance' ledger completely rebuilt. Total rows synced: {len(performance_matrix) - 1}")
+    except gspread.exceptions.WorksheetNotFound:
+        perf_sheet = spreadsheet.add_worksheet(title="RacePerformance", rows="2000", cols="15")
+        perf_sheet.update(range_name='A1', values=performance_matrix)
+        print("🆕 'RacePerformance' worksheet did not exist. Generated and populated layout.")
+
+    # 5. GENERATE EXPORT FILES FOR APP INTERFACES
+    # Append the newly structured ledger data to our JSON cache mapping dictionary
+    try:
+        final_perf_rows = perf_sheet.get_all_records()
+        data_maps["RacePerformance"] = pd.DataFrame(final_perf_rows)
+    except:
+        pass
+
     os.makedirs(DATA_DIR, exist_ok=True)
     for sheet_name, df in data_maps.items():
         lowered_name = sheet_name.lower().strip()
@@ -176,7 +200,7 @@ def process_pigeon_data():
         else: filename = f"{lowered_name}.json"
         df.to_json(os.path.join(DATA_DIR, filename), orient="records")
 
-    print("🏁 Automation loop finished successfully.")
+    print("🏁 Full automation sync loop finished successfully.")
 
 if __name__ == "__main__":
     process_pigeon_data()

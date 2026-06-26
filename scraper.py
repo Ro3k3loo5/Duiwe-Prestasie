@@ -77,53 +77,80 @@ def process_pigeon_data():
     gc = get_google_sheets_client()
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     
-    # 1. INDEX MASTER RINGS
+    # 1. INDEX MASTER RINGS WITH DUAL-PATH MATCHING MAPS
+    pigeon_lookup_map = {} # Maps a clean identifier string to your master ChickID
+    
     try:
         chicks_sheet = spreadsheet.worksheet("Chicks")
         chicks_raw = chicks_sheet.get_all_values()
-        my_birds_rings = set()
         if len(chicks_raw) > 0:
             headers = [str(h).strip() for h in chicks_raw[0]]
-            ring_col_idx = headers.index('Ring') if 'Ring' in headers else (headers.index('ChickID') if 'ChickID' in headers else 0)
+            chick_id_idx = headers.index('ChickID') if 'ChickID' in headers else 0
+            ring_idx = headers.index('Ring') if 'Ring' in headers else -1
+            
             for row in chicks_raw[1:]:
-                if len(row) > ring_col_idx and str(row[ring_col_idx]).strip():
-                    my_birds_rings.add(str(row[ring_col_idx]).strip())
-        print(f"💎 Successfully indexed {len(my_birds_rings)} master rings from 'Chicks' sheet.")
-        print(f"DEBUG: Sample inventory rings from sheet: {list(my_birds_rings)[:3]}")
+                if len(row) > chick_id_idx:
+                    full_chick_id = str(row[chick_id_idx]).strip()
+                    if not full_chick_id: continue
+                    
+                    # Map the full ID directly (normalized for dashes/spaces)
+                    norm_full = full_chick_id.replace("-", "").replace(" ", "").upper()
+                    pigeon_lookup_map[norm_full] = full_chick_id
+                    
+                    # Also map the short ring number as a fallback if available
+                    if ring_idx != -1 and len(row) > ring_idx:
+                        short_ring = str(row[ring_idx]).strip()
+                        if short_ring:
+                            norm_short = short_ring.upper()
+                            pigeon_lookup_map[norm_short] = full_chick_id
+                            
+        print(f"💎 Inventory indexing completed. Generated {len(pigeon_lookup_map)} lookup keys from 'Chicks'.")
     except Exception as e:
         print(f"❌ Inventory Load Error: {e}")
         return
 
-    # 2. RUN EXTRACTION AND VISUAL DIAGNOSTIC MATCHING
+    # 2. RUN EXTRACTION AND MATCH LEDGER ENTRIES
     all_races = get_all_api_races()
     performance_matrix = [["RaceID", "Date", "RaceName", "FederationTotalBirds", "LoftTotalBirds", "ChickID", "Distance_km", "Speed_mpm", "FederationPos", "LoftPos", "RaceIndex_calc", "Loft"]]
     row_counter = 2
-    
-    diagnostic_printed = False
 
     for race in all_races:
         arrivals = scrape_api_arrivals(race['id'])
         if not arrivals: continue
         
-        # --- DIAGNOSTIC PRINT ---
-        if not diagnostic_printed and len(arrivals) > 0:
-            print("====== STRING COMPARISON MATCHING CHECK ======")
-            print(f"Benzing API says pigeon identity looks like this: '{arrivals[0]['PigeonID']}'")
-            print(f"Your sheet inventory rings look like this: '{list(my_birds_rings)[0] if my_birds_rings else 'EMPTY'}'")
-            print("==============================================")
-            diagnostic_printed = True
+        my_clocked_birds = []
+        for bird in arrivals:
+            benz_id = bird["PigeonID"].upper()
+            benz_id_clean = benz_id.replace("-", "").replace(" ", "")
             
-        my_clocked_birds = [bird for bird in arrivals if bird["PigeonID"] in my_birds_rings]
-        loft_total_birds = len(my_clocked_birds)
+            matched_chick_id = None
+            
+            # Check full string match path
+            if benz_id_clean in pigeon_lookup_map:
+                matched_chick_id = pigeon_lookup_map[benz_id_clean]
+            else:
+                # Check if the Benzing string ends with one of your short ring IDs
+                for key, master_id in pigeon_lookup_map.items():
+                    # If key is short (e.g. '518') and benz_id ends with it (e.g. '...3518' or '-518')
+                    if len(key) <= 5 and (benz_id.endswith("-" + key) or benz_id.endswith(" " + key) or benz_id == key):
+                        # Verify it belongs to your prefix configuration safely
+                        matched_chick_id = master_id
+                        break
+            
+            if matched_chick_id:
+                bird["MappedChickID"] = matched_chick_id
+                my_clocked_birds.append(bird)
         
+        loft_total_birds = len(my_clocked_birds)
         if loft_total_birds > 0:
-            print(f"🚀 Match Found! {race['name']} -> Clocked {loft_total_birds} birds.")
+            print(f"🚀 Match Found! {race['name']} -> Clocked {loft_total_birds} of your birds.")
             my_clocked_birds.sort(key=lambda x: float(x["Speed"]) if x["Speed"].replace('.','',1).isdigit() else 0.0, reverse=True)
+            
             for loft_idx, bird in enumerate(my_clocked_birds):
                 formula_string = f'=IFERROR(((D{row_counter} - I{row_counter} + 1)/D{row_counter} + (E{row_counter} - J{row_counter} + 1)/E{row_counter})/2,"")'
                 performance_matrix.append([
                     race['name'].upper().split()[0], race['date'], race['name'],
-                    int(race['total_fed_birds']), int(loft_total_birds), bird["PigeonID"],
+                    int(race['total_fed_birds']), int(loft_total_birds), bird["MappedChickID"],
                     float(bird["Distance"]), float(bird["Speed"]), int(bird["FedPos"]),
                     int(loft_idx + 1), formula_string, bird["Fancier"]
                 ])
@@ -135,7 +162,7 @@ def process_pigeon_data():
     perf_sheet.update(range_name='A1', values=performance_matrix)
     print(f"✅ 'RacePerformance' ledger completely rebuilt. Total rows synced: {len(performance_matrix) - 1}")
 
-    # 4. DOWNLOAD CACHE DATA & FIX DUPLICATED COLUMNS FOR APP EXPORT
+    # 4. DOWNLOAD CACHE DATA FOR APP EXPORT
     sheets_to_load = ["Chicks", "Cocks", "Hens", "Pairs", "ByRound", "ByMonth", "Summary", "RacePerformance"]
     data_maps = {}
     for s_name in sheets_to_load:
@@ -143,7 +170,6 @@ def process_pigeon_data():
             worksheet = spreadsheet.worksheet(s_name)
             all_rows = worksheet.get_all_values()
             if len(all_rows) > 0:
-                # Force clean duplicate headers dynamically so Pandas never crashes
                 raw_headers = [str(h).strip() if h else f"BlankHeader" for h in all_rows[0]]
                 clean_headers = []
                 counts = {}
@@ -153,7 +179,6 @@ def process_pigeon_data():
                         clean_headers.append(f"{h}_{counts[h]}")
                     else:
                         clean_headers.append(h)
-                
                 df = pd.DataFrame(all_rows[1:], columns=clean_headers)
                 data_maps[s_name] = df.fillna("")
         except:

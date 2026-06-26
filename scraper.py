@@ -3,18 +3,17 @@ import json
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 import gspread
 from google.oauth2.service_account import Credentials
+import re
 
 # Configuration
 SPREADSHEET_ID = "1ulog31dbsBRfzdl_zNMroCBNwdKh89HwOfXPSEoIDLk"
 DATA_DIR = "data"
-# Main page showing the season's itinerary
 BENZING_RACES_PAGE_URL = "https://mypigeons.benzing.live/za/en/results/2026/o-2-gam-gamtoos-federation/races/"
 
 def get_google_sheets_client():
-    """Authenticates using the encrypted GitHub Secret packet."""
     creds_json = os.environ.get("GOOGLE_CREDENTIALS")
     if not creds_json:
         raise ValueError("⚠️ GOOGLE_CREDENTIALS secret is missing from GitHub Settings!")
@@ -22,67 +21,126 @@ def get_google_sheets_client():
     creds_dict = json.loads(creds_json)
     return gspread.authorize(Credentials.from_service_account_info(creds_dict, scopes=scopes))
 
-def get_active_race_links(races_url):
-    """Scans the season schedule and dynamically grabs hyperlinks for active/completed races."""
-    print("🔍 Scanning the complete Season Schedule for active rows...")
+def get_active_race_slugs(races_url):
+    print("🔍 Scanning the complete Season Schedule for active race identifiers...")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    links_to_scrape = []
+    race_slugs = []
     try:
         response = requests.get(races_url, headers=headers, timeout=15)
-        if response.status_code != 200: return links_to_scrape
+        if response.status_code != 200: return race_slugs
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Look at every single structural container block on the schedule table layout
+        # Locate all structural rows on the schedule board
         for row in soup.find_all(['tr', 'div', 'li']):
             text_content = row.get_text()
-            # Target rows matching your exact criteria
+            # Process rows flagged as completed or currently active
             if "Processed" in text_content or "Being evaluated" in text_content:
-                # Capture every valid hyperlink nested inside that completed block
                 for a_tag in row.find_all('a', href=True):
                     href = a_tag['href']
-                    if "/race/" in href or "/results/" in href:
-                        full_url = urljoin(races_url, href)
-                        if full_url not in links_to_scrape:
-                            links_to_scrape.append(full_url)
+                    # Extract the unique race identifier slug (e.g., r-6317-middelburg-1)
+                    match = re.search(r'/(r-\d+-[^/]+)/', href)
+                    if match:
+                        slug = match.group(1)
+                        if slug not in race_slugs:
+                            race_slugs.append(slug)
                             
-        print(f"📋 Found {len(links_to_scrape)} active race result links matching your status rules.")
+        print(f"📋 Found {len(race_slugs)} active race slugs matching your rules: {race_slugs}")
     except Exception as e:
         print(f"⚠️ Failed parsing the main schedule page: {e}")
-    return links_to_scrape
+    return race_slugs
 
-def scrape_individual_race(url):
-    """Downloads a specific live race table and converts it into structured dictionary data."""
-    print(f"🌐 Extracting arrivals from: {url}")
-    headers = {'User-Agent': 'Mozilla/5.0'}
+def scrape_on_the_fly_race(race_slug):
+    """Loops through all pagination pages for a specific race slug using your exact HTML grid layout."""
+    print(f"🌐 Commencing multi-page deep extraction for race: {race_slug}")
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     records = []
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        if response.status_code != 200: return records
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        rows = soup.find_all('tr')
-        
-        title_elem = soup.find('h1') or soup.find('h2') or soup.find('title')
-        race_name = title_elem.text.strip().split("\n")[0] if title_elem else "Live Race"
-        # Clean background navigational text tags out of title string
-        race_name = race_name.replace("Races", "").replace("-", "").strip()
+    page = 1
+    
+    # Human-friendly clean title extraction from slug string
+    race_clean_name = race_slug.replace("r-", "").replace("-", " ").title()
+    # Strip leading tracking numbers from the name if present
+    race_clean_name = re.sub(r'^\d+\s+', '', race_clean_name).strip()
 
-        for row in rows:
-            cells = row.find_all('td')
-            if len(cells) >= 6:
-                text_data = [c.text.strip() for c in cells]
-                records.append({
-                    "Race": race_name,
-                    "Nom": text_data[0],
-                    "Fancier": text_data[1],
-                    "PigeonID": text_data[2],
-                    "Arrival": text_data[3],
-                    "Speed": text_data[4],
-                    "Distance": text_data[5]
-                })
-    except Exception as e:
-        print(f"⚠️ Error pulling table from {url}: {e}")
+    while True:
+        target_url = f"https://mypigeons.benzing.live/za/en/results/on-the-fly/{race_slug}/by-pigeons/?page={page}"
+        print(f"📄 Scraping Page {page} -> {target_url}")
+        
+        try:
+            response = requests.get(target_url, headers=headers, timeout=15)
+            if response.status_code != 200:
+                print(f"🛑 Page {page} not found or blocked. Moving to next dataset.")
+                break
+                
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Target the outer container rows matching your element block profile
+            arrival_blocks = soup.find_all('div', class_='row no-gutters')
+            
+            page_records_found = 0
+            for block in arrival_blocks:
+                # To prevent cross-contamination, confirm this sub-block contains a unique pigeon ID layout block
+                pigeon_span = block.find('span', text=lambda t: t and ('ZA-' in t or 'ZA ' in t))
+                if not pigeon_span:
+                    # Alternative deep hunt for nested ring configurations
+                    pigeon_span = block.find(lambda tag: tag.name == 'span' and any(yr in tag.text for yr in ['-202', '-201', 'ZA']))
+                
+                if pigeon_span:
+                    pigeon_id = pigeon_span.text.strip()
+                    
+                    # Target layout column markers matching your exact inspect specifications
+                    fancier_div = block.find('div', class_='col-5 col-md-5')
+                    fancier = fancier_div.text.strip() if fancier_div else "Unknown"
+                    
+                    # Deep dive parsing for time text blocks, skipping structural clock icons
+                    clock_div = block.find('div', class_='col-12 col-md-8')
+                    arrival_time = "00:00:00"
+                    speed = "0.000"
+                    distance = "0.000"
+                    
+                    if clock_div:
+                        cols = clock_div.find_all('div', class_=lambda c: c is None or 'text-center' in c or 'right' in c)
+                        # Clean inner data structures out of responsive display blocks
+                        raw_segments = [c.get_text(strip=True) for c in cols]
+                        
+                        # Strip standard sub-labels to leave pure numerical data
+                        cleaned_segments = []
+                        for seg in raw_segments:
+                            cleaned = seg.replace("m/min", "").replace("km", "").strip()
+                            if cleaned: cleaned_segments.append(cleaned)
+                            
+                        if len(cleaned_segments) >= 3:
+                            arrival_time = cleaned_segments[0]
+                            speed = cleaned_segments[1]
+                            distance = cleaned_segments[2]
+                    
+                    # Prevent tracking duplications from responsive duplicate elements on same grid line
+                    record_key = (pigeon_id, race_clean_name)
+                    if not any(r["PigeonID"] == pigeon_id and r["Race"] == race_clean_name for r in records):
+                        records.append({
+                            "Race": race_clean_name,
+                            "Nom": "", 
+                            "Fancier": fancier,
+                            "PigeonID": pigeon_id,
+                            "Arrival": arrival_time,
+                            "Speed": speed,
+                            "Distance": distance
+                        })
+                        page_records_found += 1
+            
+            print(f"🎯 Successfully extracted {page_records_found} entries from page {page}.")
+            
+            # Break condition: If a page contains no visible bird configurations, pagination is complete
+            if page_records_found == 0:
+                print(f"🏁 Reached pagination limit for {race_clean_name}.")
+                break
+                
+            page += 1
+            
+        except Exception as e:
+            print(f"⚠️ Error handling dataset compilation on page {page}: {e}")
+            break
+            
     return records
 
 def process_pigeon_data():
@@ -90,7 +148,7 @@ def process_pigeon_data():
     gc = get_google_sheets_client()
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     
-    # 1. DOWNLOAD SYSTEM DATA ROWS FOR INTERFACE (Bypass duplicate header warnings cleanly)
+    # 1. DOWNLOAD INTERFACE CACHE VALUES (Bypassing messy duplicate columns natively)
     sheets_to_load = ["RacePerformance", "Chicks", "Cocks", "Hens", "Pairs", "ByRound", "ByMonth", "Summary"]
     data_maps = {}
     
@@ -98,12 +156,8 @@ def process_pigeon_data():
         try:
             worksheet = spreadsheet.worksheet(s_name)
             all_rows = worksheet.get_all_values()
-            
             if len(all_rows) > 0:
-                # Sanitize and handle empty header spaces safely
                 headers = [str(h).strip() if h else f"EmptyHeader_{i}" for i, h in enumerate(all_rows[0])]
-                
-                # Check for duplicate header labels and make them unique on-the-fly to protect dataset stability
                 seen = {}
                 for idx, h in enumerate(headers):
                     if h in seen:
@@ -111,7 +165,6 @@ def process_pigeon_data():
                         headers[idx] = f"{h}_{seen[h]}"
                     else:
                         seen[h] = 0
-                
                 df = pd.DataFrame(all_rows[1:], columns=headers)
                 data_maps[s_name] = df.fillna("")
                 print(f"✅ Downloaded current tab successfully: {s_name}")
@@ -121,13 +174,13 @@ def process_pigeon_data():
             print(f"⚠️ Tracking warning on sheet '{s_name}': {e}")
             data_maps[s_name] = pd.DataFrame()
 
-    # 2. RUN DYNAMIC STATUS CHECK IN THE BACKGROUND ON BENZING
-    active_tables = get_active_race_links(BENZING_RACES_PAGE_URL)
+    # 2. RUN HARVEST SCRIPT VIA THE DYNAMIC ON-THE-FLY ENGINE
+    active_slugs = get_active_race_slugs(BENZING_RACES_PAGE_URL)
     all_scraped_arrivals = []
-    for table_url in active_tables:
-        all_scraped_arrivals.extend(scrape_individual_race(table_url))
+    for slug in active_slugs:
+        all_scraped_arrivals.extend(scrape_on_the_fly_race(slug))
 
-    # 3. COMPARE AND APPEND NEW ARRIVALS BACK TO THE MASTER TAB
+    # 3. APPEND NEW ENTRIES DIRECTLY INTO YOUR SPREADSHEET CELLS
     if all_scraped_arrivals:
         race_perf_sheet = spreadsheet.worksheet("RacePerformance")
         existing_rows = race_perf_sheet.get_all_values()
@@ -154,18 +207,18 @@ def process_pigeon_data():
                     arrival["Race"],     # RaceName
                     "",                  # Federation Total Birds
                     "",                  # Loft Total Birds
-                    arrival["PigeonID"], # ChickID
+                    arrival["PigeonID"], # ChickID/PigeonID
                     arrival["Distance"], # Distance_km
                     arrival["Speed"],    # Speed_mpm
                 ]
                 new_rows_to_append.append(new_row)
 
         if new_rows_to_append:
-            print(f"🚀 Appending {len(new_rows_to_append)} new rows directly to Google Sheets...")
+            print(f"🚀 Appending {len(new_rows_to_append)} brand new race tracking lines directly to Google Sheets...")
             race_perf_sheet.append_rows(new_rows_to_append)
             print("📝 Google Sheet cells populated successfully!")
             
-            # Update local dataset cache so the dashboard displays changes immediately
+            # Force cache reload to populate the website instantly
             all_rows_updated = race_perf_sheet.get_all_values()
             headers_updated = [str(h).strip() if h else f"EmptyHeader_{i}" for i, h in enumerate(all_rows_updated[0])]
             seen_u = {}
@@ -177,24 +230,20 @@ def process_pigeon_data():
                     seen_u[h] = 0
             data_maps["RacePerformance"] = pd.DataFrame(all_rows_updated[1:], columns=headers_updated).fillna("")
         else:
-            print("✨ Google Sheet is completely up to date with the season itinerary.")
+            print("✨ Google Sheet is completely current with all active flights.")
 
-# 4. SAVE CACHED JSON DATA PACKETS FOR THE WEB SYSTEM
+    # 4. EXPORT COPIES FOR MOBILE FRONTEND DISPLAY
     os.makedirs(DATA_DIR, exist_ok=True)
     for sheet_name, df in data_maps.items():
-        # Force the filename to be entirely lowercase to match what the webpage expects
         lowered_name = sheet_name.lower().strip()
-        
-        if lowered_name == "raceperformance": 
-            filename = "race_performance.json"
-        elif lowered_name == "byround": 
-            filename = "byround.json"
-        elif lowered_name == "bymonth": 
-            filename = "bymonth.json"
-        else: 
-            filename = f"{lowered_name}.json"
+        if lowered_name == "raceperformance": filename = "race_performance.json"
+        elif lowered_name == "byround": filename = "byround.json"
+        elif lowered_name == "bymonth": filename = "bymonth.json"
+        else: filename = f"{lowered_name}.json"
             
         df.to_json(os.path.join(DATA_DIR, filename), orient="records")
-        print(f"💾 Saved clean web asset: {filename}")
 
     print("🏁 Automation loop finished successfully.")
+
+if __name__ == "__main__":
+    process_pigeon_data()

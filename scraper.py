@@ -97,17 +97,40 @@ def process_pigeon_data():
     gc = get_google_sheets_client()
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     
-    # 1. READ MASTER RING NUMBERS FROM CHICKS SHEET
+# 1. READ MASTER RING NUMBERS FROM CHICKS SHEET Safely
     try:
         chicks_sheet = spreadsheet.worksheet("Chicks")
-        chicks_rows = chicks_sheet.get_all_records()
-        # Create a set of your active ring numbers for fast lookup mapping
-        my_birds_rings = {str(row.get('Ring', row.get('ChickID', ''))).strip() for row in chicks_rows if row.get('Ring') or row.get('ChickID')}
+        chicks_raw = chicks_sheet.get_all_values()
+        
+        my_birds_rings = set()
+        if len(chicks_raw) > 0:
+            # Clean up headers to find the correct column positions
+            headers = [str(h).strip() for h in chicks_raw[0]]
+            
+            # Find column index for 'Ring' or 'ChickID'
+            ring_col_idx = -1
+            if 'Ring' in headers:
+                ring_col_idx = headers.index('Ring')
+            elif 'ChickID' in headers:
+                ring_col_idx = headers.index('ChickID')
+            
+            if ring_col_idx != -1:
+                # Loop through all rows skipping the header line
+                for row in chicks_raw[1:]:
+                    if len(row) > ring_col_idx:
+                        ring_val = str(row[ring_col_idx]).strip()
+                        if ring_val:
+                            my_birds_rings.add(ring_val)
+            else:
+                print("⚠️ Could not find a 'Ring' or 'ChickID' header. Defaulting to Column 1 scan...")
+                for row in chicks_raw[1:]:
+                    if row and str(row[0]).strip():
+                        my_birds_rings.add(str(row[0]).strip())
+
         print(f"💎 Successfully indexed {len(my_birds_rings)} master rings from 'Chicks' sheet.")
     except Exception as e:
         print(f"❌ Critical error loading your bird inventory from 'Chicks': {e}")
         return
-
     # 2. CACHE DASHBOARD LAYOUTS FOR BACKEND EXPORTS
     sheets_to_load = ["Chicks", "Cocks", "Hens", "Pairs", "ByRound", "ByMonth", "Summary"]
     data_maps = {}

@@ -10,6 +10,7 @@ import time
 SPREADSHEET_ID = "1ulog31dbsBRfzdl_zNMroCBNwdKh89HwOfXPSEoIDLk"
 DATA_DIR = "data"
 BENZING_API_RACES_URL = "https://mypigeons.benzing.live/api/v2/za/smartclub/2/2026/races"
+TARGET_LOFT = "GEORGE VAN ONSELEN"
 
 def get_google_sheets_client():
     creds_json = os.environ.get("GOOGLE_CREDENTIALS")
@@ -59,7 +60,7 @@ def scrape_api_arrivals(race_id):
             for index, item in enumerate(arrivals):
                 fed_pos = ((page - 1) * limit) + (index + 1)
                 all_arrivals.append({
-                    "Fancier": str(item.get('fancier_name', 'Unknown')).strip(),
+                    "Fancier": str(item.get('fancier_name', 'Unknown')).strip().upper(),
                     "PigeonID": str(item.get('pigeon_string', 'Unknown')).strip(),
                     "Arrival": str(item.get('time_of_arrival', '00:00:00')).strip(),
                     "Speed": str(item.get('speed', '0.000')).strip(),
@@ -104,63 +105,60 @@ def process_pigeon_data():
 
     # 2. RUN EXTRACTION AND MATCH LEDGER ENTRIES
     all_races = get_all_api_races()
-    performance_matrix = [["RaceID", "Date", "RaceName", "FederationTotalBirds", "LoftTotalBirds", "ChickID", "Distance_km", "Speed_mpm", "FederationPos", "LoftPos", "RaceIndex_calc", "Loft"]]
+    performance_matrix = [["RaceID", "Date", "RaceName", "FederationTotalBirds", "LoftTotalBirds", "ChickID", "Distance_km", "Speed_mpm", "FederationPos", "LoftPos", "RaceIndex_calc", "LoftRaced In"]]
     row_counter = 2
 
     for race in all_races:
         arrivals = scrape_api_arrivals(race['id'])
         if not arrivals: continue
         
-        my_clocked_birds = []
-        for bird in arrivals:
-            benz_id = bird["PigeonID"].upper()
-            benz_id_clean = benz_id.replace("-", "").replace(" ", "")
-            matched_chick_id = None
-            
-            if benz_id_clean in pigeon_lookup_map:
-                matched_chick_id = pigeon_lookup_map[benz_id_clean]
-            else:
-                for key, master_id in pigeon_lookup_map.items():
-                    if len(key) <= 5 and (benz_id.endswith("-" + key) or benz_id.endswith(" " + key) or benz_id == key):
-                        matched_chick_id = master_id
-                        break
-            
-            if matched_chick_id:
-                bird["MappedChickID"] = matched_chick_id
-                my_clocked_birds.append(bird)
+        # Isolate every single bird clocked by George to figure out his accurate total and rank order
+        georges_arrivals = [bird for bird in arrivals if bird["Fancier"] == TARGET_LOFT]
+        loft_total_birds = len(georges_arrivals)
         
-        loft_total_birds = len(my_clocked_birds)
         if loft_total_birds > 0:
-            my_clocked_birds.sort(key=lambda x: float(x["Speed"]) if x["Speed"].replace('.','',1).isdigit() else 0.0, reverse=True)
+            # Sort George's birds by speed descending to establish true internal loft positions
+            georges_arrivals.sort(key=lambda x: float(x["Speed"]) if x["Speed"].replace('.','',1).isdigit() else 0.0, reverse=True)
             
-            for loft_idx, bird in enumerate(my_clocked_birds):
-                formula_string = f'=IFERROR(((D{row_counter} - I{row_counter} + 1)/D{row_counter} + (E{row_counter} - J{row_counter} + 1)/E{row_counter})/2,"")'
-                performance_matrix.append([
-                    race['name'].upper().split()[0], race['date'], race['name'],
-                    int(race['total_fed_birds']), int(loft_total_birds), bird["MappedChickID"],
-                    float(bird["Distance"]), float(bird["Speed"]), int(bird["FedPos"]),
-                    int(loft_idx + 1), formula_string, bird["Fancier"]
-                ])
-                row_counter += 1
+            # Map ranks out dynamically
+            for internal_idx, bird in enumerate(georges_arrivals):
+                loft_pos = internal_idx + 1
+                benz_id = bird["PigeonID"].upper()
+                benz_id_clean = benz_id.replace("-", "").replace(" ", "")
+                
+                matched_chick_id = None
+                if benz_id_clean in pigeon_lookup_map:
+                    matched_chick_id = pigeon_lookup_map[benz_id_clean]
+                else:
+                    for key, master_id in pigeon_lookup_map.items():
+                        if len(key) <= 5 and (benz_id.endswith("-" + key) or benz_id.endswith(" " + key) or benz_id == key):
+                            matched_chick_id = master_id
+                            break
+                
+                # Append row ONLY if this specific bird is part of your Chicks inventory team
+                if matched_chick_id:
+                    formula_string = f'=IFERROR(((D{row_counter} - I{row_counter} + 1)/D{row_counter} + (E{row_counter} - J{row_counter} + 1)/E{row_counter})/2,"")'
+                    performance_matrix.append([
+                        race['name'].upper().split()[0], race['date'], race['name'],
+                        int(race['total_fed_birds']), int(loft_total_birds), matched_chick_id,
+                        float(bird["Distance"]), float(bird["Speed"]), int(bird["FedPos"]),
+                        int(loft_pos), formula_string, TARGET_LOFT
+                    ])
+                    row_counter += 1
 
-    # 3. OVERWRITE RACEPERFORMANCE SHEET SAFELY WITHOUT DESTROYING CELLS
+    # 3. OVERWRITE RACEPERFORMANCE SHEET SAFELY
     perf_sheet = spreadsheet.worksheet("RacePerformance")
-    
-    # Clear using batch update range values to preserve cross-sheet summary calculations
     perf_sheet.batch_clear(["A1:L2000"])
-    
-    # Update spreadsheet using raw value input option so formulas evaluate instantly
     perf_sheet.update(
         range_name='A1', 
         values=performance_matrix, 
         value_input_option='USER_ENTERED'
     )
     
-    # Format the entire RaceIndex_calc column (Column K) as a percentage layout
     if len(performance_matrix) > 1:
         perf_sheet.format(f"K2:K{len(performance_matrix)}", {"numberFormat": {"type": "PERCENT", "pattern": "0.00%"}})
         
-    print(f"✅ 'RacePerformance' ledger completely rebuilt. Total rows synced: {len(performance_matrix) - 1}")
+    print(f"✅ 'RacePerformance' ledger completely rebuilt for {TARGET_LOFT}. Rows synced: {len(performance_matrix) - 1}")
 
     # 4. DOWNLOAD CACHE DATA FOR APP EXPORT
     sheets_to_load = ["Chicks", "Cocks", "Hens", "Pairs", "ByRound", "ByMonth", "Summary", "RacePerformance"]

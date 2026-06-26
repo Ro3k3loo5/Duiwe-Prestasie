@@ -1,18 +1,15 @@
 import os
 import json
 import requests
-from bs4 import BeautifulSoup
 import pandas as pd
-from urllib.parse import urljoin
 import gspread
 from google.oauth2.service_account import Credentials
-import re
 import time
 
 # Configuration
 SPREADSHEET_ID = "1ulog31dbsBRfzdl_zNMroCBNwdKh89HwOfXPSEoIDLk"
 DATA_DIR = "data"
-BENZING_RACES_PAGE_URL = "https://mypigeons.benzing.live/za/en/results/2026/o-2-gam-gamtoos-federation/races/"
+BENZING_API_RACES_URL = "https://mypigeons.benzing.live/api/v2/za/smartclub/2/2026/races"
 
 def get_google_sheets_client():
     creds_json = os.environ.get("GOOGLE_CREDENTIALS")
@@ -22,108 +19,90 @@ def get_google_sheets_client():
     creds_dict = json.loads(creds_json)
     return gspread.authorize(Credentials.from_service_account_info(creds_dict, scopes=scopes))
 
-def get_all_season_race_slugs(races_url):
-    print("🔍 Harvesting all scheduled races from the main calendar page...")
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+def get_all_api_races():
+    print("🔍 Fetching season schedule directly from Benzing API...")
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     race_list = []
     try:
-        response = requests.get(races_url, headers=headers, timeout=15)
-        if response.status_code != 200: return race_list
+        response = requests.get(BENZING_API_RACES_URL, headers=headers, timeout=15)
+        if response.status_code != 200:
+            print(f"❌ API Rejected request. Status: {response.status_code}")
+            return race_list
         
-        soup = BeautifulSoup(response.text, 'html.parser')
-        links_found = soup.find_all('a', href=True)
+        # Parse the raw API data package
+        data = response.json()
         
-        print(f"DEBUG: Found {len(links_found)} total hyperlinks on the page.")
-        print("====== LIST OF ALL LINKS FOUND ======")
-        for i, a_tag in enumerate(links_found):
-            print(f"Link #{i+1}: Text: '{a_tag.get_text().strip()}' | Href: '{a_tag['href']}'")
-        print("=====================================")
+        # Navigate through Benzing's data structure
+        # (Handling standard lists or nested dictionary setups safely)
+        races_data = data if isinstance(data, list) else data.get('data', [])
         
-        # Keep the rest of the loop simple for now
-        for a_tag in links_found:
-            href = a_tag['href']
-            if "r-" in href or "flight" in href or "race" in href:
-                match = re.search(r'/([^/]+)/?$', href.strip('/'))
-                if match:
-                    slug = match.group(1)
-                    if slug not in ['races', 'dashboard', '2026', 'en', 'za']:
-                        race_list.append({'slug': href, 'name': a_tag.get_text().strip() or slug})
-                            
-        print(f"📋 Refined Scan Found {len(race_list)} matches.")
+        for race in races_data:
+            race_id = race.get('id') or race.get('race_id')
+            race_name = race.get('name') or race.get('station_name')
+            
+            if race_id and race_name:
+                race_list.append({
+                    'id': str(race_id),
+                    'name': str(race_name).strip()
+                })
+                
+        print(f"📋 API Schedule Scan Found {len(race_list)} total races.")
     except Exception as e:
-        print(f"⚠️ Failed parsing calendar slugs: {e}")
+        print(f"⚠️ Failed reading API schedule: {e}")
     return race_list
 
-def scrape_entire_raw_race(race_slug, clean_name):
-    """Iterates page-by-page to collect every single data point from the live arrival list."""
-    print(f"🌐 Deep scraping raw listings for: {clean_name} ({race_slug})")
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+def scrape_api_arrivals(race_id, race_name):
+    print(f"🌐 Deep pulling arrivals from API for: {race_name} (ID: {race_id})")
+    headers = {'User-Agent': 'Mozilla/5.0'}
     raw_records = []
     page = 1
+    limit = 50
 
     while True:
-        target_url = f"https://mypigeons.benzing.live/za/en/results/on-the-fly/{race_slug}/by-pigeons/?page={page}"
-        print(f"📄 Reading Page {page} -> {target_url}")
+        target_url = f"https://mypigeons.benzing.live/api/v2/za/club-races/{race_id}/on-the-fly/arrivals?page_number={page}&limit={limit}"
+        print(f"📄 Requesting Page {page} -> {target_url}")
         
         try:
             response = requests.get(target_url, headers=headers, timeout=15)
             if response.status_code != 200:
                 break
                 
-            soup = BeautifulSoup(response.text, 'html.parser')
-            arrival_blocks = soup.find_all('div', class_='row no-gutters')
+            data = response.json()
+            arrivals = data if isinstance(data, list) else data.get('arrivals', data.get('data', []))
             
-            page_records_found = 0
-            for block in arrival_blocks:
-                # Identify if this row block contains a pigeon ring string sequence
-                pigeon_span = block.find('span', text=lambda t: t and ('ZA-' in t or 'ZA ' in t))
-                if not pigeon_span:
-                    pigeon_span = block.find(lambda tag: tag.name == 'span' and any(yr in tag.text for yr in ['-202', '-201', 'ZA']))
+            if not arrivals or len(arrivals) == 0:
+                print(f"🏁 No records found on page {page}. Finishing race collection.")
+                break
                 
-                if pigeon_span:
-                    pigeon_id = pigeon_span.text.strip()
-                    
-                    fancier_div = block.find('div', class_='col-5 col-md-5')
-                    fancier = fancier_div.text.strip() if fancier_div else "Unknown"
-                    
-                    arrival_time = "00:00:00"
-                    speed = "0.000"
-                    distance = "0.000"
-                    
-                    clock_div = block.find('div', class_='col-12 col-md-8')
-                    if clock_div:
-                        cols = clock_div.find_all('div', class_=lambda c: c is None or 'text-center' in c or 'right' in c)
-                        raw_segments = [c.get_text(strip=True) for c in cols]
-                        
-                        cleaned_segments = []
-                        for seg in raw_segments:
-                            cleaned = seg.replace("m/min", "").replace("km", "").strip()
-                            if cleaned: cleaned_segments.append(cleaned)
-                            
-                        if len(cleaned_segments) >= 3:
-                            arrival_time = cleaned_segments[0]
-                            speed = cleaned_segments[1]
-                            distance = cleaned_segments[2]
-                    
-                    # Deduplicate within this run context
-                    if not any(r["PigeonID"] == pigeon_id for r in raw_records):
-                        raw_records.append({
-                            "Fancier": fancier,
-                            "PigeonID": pigeon_id,
-                            "Arrival": arrival_time,
-                            "Speed": speed,
-                            "Distance": distance
-                        })
-                        page_records_found += 1
+            page_count = 0
+            for item in arrivals:
+                # Dynamically extract values based on raw Benzing field patterns
+                fancier = item.get('fancier_name') or item.get('fancier', {}).get('name', 'Unknown')
+                pigeon_id = item.get('pigeon_id') or item.get('pigeon_ring') or item.get('ring_number') or item.get('pigeon', {}).get('ring', 'Unknown')
+                arrival_time = item.get('arrival_time') or item.get('arrival', '00:00:00')
+                speed = item.get('speed') or item.get('m_min', '0.000')
+                distance = item.get('distance') or item.get('km', '0.000')
+                
+                raw_records.append({
+                    "Fancier": str(fancier).strip(),
+                    "PigeonID": str(pigeon_id).strip(),
+                    "Arrival": str(arrival_time).strip(),
+                    "Speed": str(speed).strip(),
+                    "Distance": str(distance).strip()
+                })
+                page_count += 1
+                
+            print(f"🎯 Extracted {page_count} rows from page {page}.")
             
-            if page_records_found == 0:
+            # If the page returned fewer items than the limit, we've reached the final page
+            if page_count < limit:
                 break
                 
             page += 1
-            time.sleep(0.5) # Soft throttling to remain under security firewall radars
+            time.sleep(0.3)
             
         except Exception as e:
-            print(f"⚠️ Problem processing page {page}: {e}")
+            print(f"⚠️ Error parsing arrivals api payload on page {page}: {e}")
             break
             
     return raw_records
@@ -157,29 +136,24 @@ def process_pigeon_data():
         except Exception as e:
             data_maps[s_name] = pd.DataFrame()
 
-    # 2. RUN FULL SCHEDULE RAW EXTRACTION
-    all_races = get_all_season_race_slugs(BENZING_RACES_PAGE_URL)
+    # 2. RUN FULL SCHEDULE RAW EXTRACTION VIA DISCOVERED API LINKS
+    all_races = get_all_api_races()
     
     for race in all_races:
-        # Sheet names have a max limit of 31 characters in Google Sheets
         sheet_title = race['name'][:30].strip()
-        
-        # Pull raw arrays
-        raw_data = scrape_entire_raw_race(race['slug'], race['name'])
+        raw_data = scrape_api_arrivals(race['id'], race['name'])
         
         if raw_data:
             print(f"🚀 Found {len(raw_data)} arrivals. Syncing directly to sheet: '{sheet_title}'")
             
-            # Find or generate the individual blank sheet tab dynamically
             try:
                 race_sheet = spreadsheet.worksheet(sheet_title)
-                race_sheet.clear() # Clear out previous data to ensure a fresh raw pull
+                race_sheet.clear()
                 print(f"🧹 Cleared old records from existing '{sheet_title}' worksheet.")
             except gspread.exceptions.WorksheetNotFound:
                 race_sheet = spreadsheet.add_worksheet(title=sheet_title, rows="1000", cols="10")
                 print(f"🆕 Created brand new dedicated worksheet tab: '{sheet_title}'")
             
-            # Formulate layout row matrix headers
             sheet_matrix = [["Fancier", "PigeonID", "Arrival", "Speed", "Distance"]]
             for bird in raw_data:
                 sheet_matrix.append([
@@ -190,11 +164,10 @@ def process_pigeon_data():
                     bird["Distance"]
                 ])
                 
-            # Deliver full block payload instantly via a single API write call
             race_sheet.update('A1', sheet_matrix)
             print(f"✅ Sheet '{sheet_title}' raw upload completed successfully!")
         else:
-            print(f"✨ '{race['name']}' returned 0 data points (Planned or empty). Skipping sheet creation.")
+            print(f"✨ '{race['name']}' returned 0 data points from API. Skipping sheet execution.")
 
     # 3. COMPILING EXPORT FILES FOR APP VISUALIZATION LAYOUTS
     os.makedirs(DATA_DIR, exist_ok=True)

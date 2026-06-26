@@ -179,16 +179,22 @@ def process_pigeon_data():
         else:
             print("✨ Google Sheet is completely up to date with the season itinerary.")
 
-    # 4. SAVE CACHED JSON DATA PACKETS FOR THE WEB SYSTEM
+# 4. SAVE CACHED JSON DATA PACKETS FOR THE WEB SYSTEM
     os.makedirs(DATA_DIR, exist_ok=True)
     for sheet_name, df in data_maps.items():
-        if sheet_name == "RacePerformance": filename = "race_performance.json"
-        elif sheet_name == "ByRound": filename = "byround.json"
-        elif sheet_name == "ByMonth": filename = "bymonth.json"
-        else: filename = f"{sheet_name.lower()}.json"
+        # Force the filename to be entirely lowercase to match what the webpage expects
+        lowered_name = sheet_name.lower().strip()
+        
+        if lowered_name == "raceperformance": 
+            filename = "race_performance.json"
+        elif lowered_name == "byround": 
+            filename = "byround.json"
+        elif lowered_name == "bymonth": 
+            filename = "bymonth.json"
+        else: 
+            filename = f"{lowered_name}.json"
+            
         df.to_json(os.path.join(DATA_DIR, filename), orient="records")
+        print(f"💾 Saved clean web asset: {filename}")
 
     print("🏁 Automation loop finished successfully.")
-
-if __name__ == "__main__":
-    process_pigeon_data()

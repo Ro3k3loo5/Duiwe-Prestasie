@@ -66,9 +66,7 @@ def scrape_api_arrivals(race_id, race_name):
                 break
                 
             data = response.json()
-            
-            # Support both flat list arrays or dictionary payloads
-            arrivals = data if isinstance(data, list) else data.get('arrivals', data.get('data', []))
+            arrivals = data if isinstance(data, list) else data.get('arrivals', [])
             
             if not arrivals or len(arrivals) == 0:
                 print(f"🏁 No records found on page {page}. Finishing race collection.")
@@ -76,17 +74,12 @@ def scrape_api_arrivals(race_id, race_name):
                 
             page_count = 0
             for item in arrivals:
-                # Direct object unpacking with deep path fallbacks
-                fancier = item.get('fancierName') or item.get('fancier_name') or item.get('fancier', {}).get('name', 'Unknown')
-                pigeon_id = item.get('pigeonHtmlRing') or item.get('ringNumber') or item.get('pigeonId') or 'Unknown'
-                
-                # strip any HTML formatting tags if Benzing packs them inside pigeonHtmlRing
-                if "<" in str(pigeon_id):
-                    pigeon_id = str(pigeon_id).split('>')[-2].split('<')[0].strip() if '>' in str(pigeon_id) else pigeon_id
-                
-                arrival_time = item.get('arrivalTime') or item.get('arrivalTimeStr') or '00:00:00'
-                speed = item.get('speed') or item.get('speedStr') or '0.000'
-                distance = item.get('distance') or '0.000'
+                # Direct object unpacking using exact properties from your JSON trace
+                fancier = item.get('fancier_name', 'Unknown')
+                pigeon_id = item.get('pigeon_string', 'Unknown')
+                arrival_time = item.get('time_of_arrival', '00:00:00')
+                speed = item.get('speed', '0.000')
+                distance = item.get('distance', '0.000')
                 
                 raw_records.append({
                     "Fancier": str(fancier).strip(),

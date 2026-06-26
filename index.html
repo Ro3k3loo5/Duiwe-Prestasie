@@ -67,7 +67,7 @@
     </main>
 
     <div id="pigeonModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden transform transition-all border border-gray-200">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden border border-gray-200">
             <div class="bg-indigo-700 text-white p-4 flex justify-between items-center">
                 <h3 class="font-bold flex items-center gap-2"><i class="fa-solid fa-feather-pointed"></i> Submit Breeding Stock Item</h3>
                 <button onclick="toggleModal('pigeonModal')" class="text-white hover:text-gray-200 text-xl font-bold">&times;</button>
@@ -152,7 +152,9 @@
         const HIDE_CONFIGS = {
             cocks: ["NAME", "GENDER", "PRE SEASON RANKING", "STATUS", "CHICK'S NOT IN LOFT", "IN LOFT SEASON START"],
             hens: ["NAME", "GENDER", "PRE SEASON RANKING", "STATUS", "CHICK'S NOT IN LOFT", "IN LOFT SEASON START"],
-            pairs: ["PRE SEASON RANKING", "CHICKS NOT IN LOFT", "STAR RATING CHICKS", "STAR RATING INDEX"]
+            pairs: ["PRE SEASON RANKING", "CHICKS NOT IN LOFT", "STAR RATING CHICKS", "STAR RATING INDEX"],
+            byround: ["PRE SEASON RANKING"],
+            bymonth: ["PRE SEASON RANKING"]
         };
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -161,8 +163,7 @@
         });
 
         function toggleModal(id) {
-            const modal = document.getElementById(id);
-            modal.classList.toggle('hidden');
+            document.getElementById(id).classList.toggle('hidden');
         }
 
         function restoreChickStatusCache() {
@@ -314,21 +315,45 @@
             let originalHeaders = Object.keys(records[0]);
             let headers = originalHeaders.filter(h => !h.toUpperCase().includes("BLANKHEADER"));
 
+            // 1. Filter out hidden columns completely
             if (HIDE_CONFIGS[tabId]) {
                 headers = headers.filter(h => !HIDE_CONFIGS[tabId].includes(h.toUpperCase().trim()));
             }
 
+            // 2. Custom Layout Re-ordering Rules per Eugene's Guidelines
             if (tabId === 'chicks') {
                 headers = headers.filter(h => h.toUpperCase() !== "RING");
-                
                 const moveToEnd = ["ROUND NUMBER", "HATCH DATE", "RAISED BY FEEDERS"];
                 const moveToFront = ["RACE INDEX", "TOTAL RACES"];
-                
                 let frontCols = headers.filter(h => moveToFront.includes(h.toUpperCase().trim()));
                 let middleCols = headers.filter(h => !moveToFront.includes(h.toUpperCase().trim()) && !moveToEnd.includes(h.toUpperCase().trim()));
                 let endCols = headers.filter(h => moveToEnd.includes(h.toUpperCase().trim()));
-                
                 headers = [...frontCols, ...middleCols, ...endCols];
+            } 
+            else if (tabId === 'byround' || tabId === 'bymonth') {
+                // Find "Chicks Born" and "Race Index" to sandwich them perfectly together
+                let targetFront = headers.filter(h => !["CHICKS BORN", "RACE INDEX"].includes(h.toUpperCase().trim()));
+                let bornCol = headers.find(h => h.toUpperCase().trim() === "CHICKS BORN");
+                let indexCol = headers.find(h => h.toUpperCase().trim() === "RACE INDEX");
+                
+                headers = [];
+                targetFront.forEach(h => {
+                    headers.push(h);
+                    if (h === bornCol) { headers.push(indexCol); }
+                });
+                // Edge case handling if order sequence differs
+                if (!headers.includes(indexCol) && indexCol) headers.push(indexCol);
+                headers = headers.filter(h => h !== undefined);
+            }
+            else if (tabId === 'raceperformance') {
+                // Map out columns strictly: ChickID first, Date next, Fed Pos next, Race Index next, then the remainder
+                let chickIdCol = headers.find(h => h.toUpperCase().trim() === "CHICKID") || "ChickID";
+                let dateCol = headers.find(h => h.toUpperCase().trim() === "DATE") || "Date";
+                let fedPosCol = headers.find(h => h.toUpperCase().trim() === "FEDERATIONPOS") || "FederationPos";
+                let raceIndexCol = headers.find(h => h.toUpperCase().trim() === "RACEINDEX_CALC") || "RaceIndex_calc";
+                
+                let remaining = headers.filter(h => !["CHICKID", "DATE", "FEDERATIONPOS", "RACEINDEX_CALC"].includes(h.toUpperCase().trim()));
+                headers = [chickIdCol, dateCol, fedPosCol, raceIndexCol, ...remaining];
             }
 
             let html = `<table class="w-full text-left border-collapse text-xs md:text-sm">`;
@@ -336,6 +361,10 @@
             
             headers.forEach(h => {
                 let cleanTitle = h.replace(/_/g, " ");
+                // Custom translation fallback for header accuracy on presentation mapping
+                if(cleanTitle.toUpperCase() === "RACEINDEX CALC") cleanTitle = "Race Index";
+                if(cleanTitle.toUpperCase() === "FEDERATIONPOS") cleanTitle = "Fed Position";
+                
                 let sortClass = masterState.sortColumn === h ? (masterState.sortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : '';
                 html += `<th onclick="handleSort('${h}')" class="p-3 whitespace-nowrap tracking-wider ${sortClass}">${cleanTitle}</th>`;
             });
@@ -360,10 +389,7 @@
                 if (tabId === 'chicks') {
                     let chickId = row["ChickID"] || row["ChickID_1"] || "";
                     let currentStatus = masterState.chickStatuses[chickId] || "Active";
-                    
-                    let selectColor = "border-green-400 bg-green-50 text-green-700";
-                    if (currentStatus === "Lost") selectColor = "border-amber-400 bg-amber-50 text-amber-700";
-                    if (currentStatus === "Dead") selectColor = "border-red-400 bg-red-50 text-red-700";
+                    let selectColor = currentStatus === 'Active' ? "border-green-400 bg-green-50 text-green-700" : (currentStatus === 'Lost' ? "border-amber-400 bg-amber-50 text-amber-700" : "border-red-400 bg-red-50 text-red-700");
 
                     html += `<td class="p-2 whitespace-nowrap">
                         <select onchange="updateChickStatus('${chickId}', this.value); this.className='border rounded px-2 py-0.5 text-xs font-bold focus:outline-none ' + (this.value==='Active'?'border-green-400 bg-green-50 text-green-700':(this.value==='Lost'?'border-amber-400 bg-amber-50 text-amber-700':'border-red-400 bg-red-50 text-red-700'))" class="border rounded px-2 py-0.5 text-xs font-bold focus:outline-none ${selectColor}">
@@ -384,7 +410,6 @@
             event.preventDefault();
             const form = event.target;
             const formData = new FormData(form);
-            const objectPayload = Object.fromEntries(formData.entries());
             alert(`🚀 Asset values compiled! Sync connection verified.\nData payload captured.`);
             form.reset();
             toggleModal(type === 'chick' ? 'chickModal' : 'pigeonModal');

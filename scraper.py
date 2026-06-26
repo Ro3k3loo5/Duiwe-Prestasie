@@ -168,7 +168,7 @@ def process_pigeon_data():
                     bird["Distance"]
                 ])
                 
-            race_sheet.update('A1', sheet_matrix)
+            race_sheet.update(range_name='A1', values=sheet_matrix)
             print(f"✅ Sheet '{sheet_title}' raw upload completed successfully!")
         else:
             print(f"✨ '{race['name']}' returned 0 data points from API. Skipping sheet execution.")

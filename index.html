@@ -45,13 +45,15 @@
 
     <header class="bg-gradient-to-r block bg-blue-700/90 text-white p-6 shadow-md backdrop-blur-sm">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-            <div class="flex items-center gap-3">
-                <i class="fa-solid fa-dove text-3xl"></i>
+            
+            <div class="flex items-center gap-4">
+                <img src="logo-bg.png" alt="Duvenage Lofts Logo" class="h-16 w-16 object-contain rounded-lg bg-white/10 p-1 shadow-sm border border-white/20">
                 <div>
                     <h1 class="text-2xl font-bold tracking-tight">Duiwe-Prestasie Engine</h1>
                     <p class="text-blue-200 text-xs">Live Analytics, Breeding Logs & Race Indicators</p>
                 </div>
             </div>
+            
             <div class="flex flex-wrap gap-2">
                 <button onclick="toggleModal('chickModal')" class="bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded text-sm font-semibold shadow flex items-center gap-2 transition"><i class="fa-solid fa-plus"></i> + Chick</button>
                 <button onclick="toggleModal('pigeonModal')" class="bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded text-sm font-semibold shadow flex items-center gap-2 transition"><i class="fa-solid fa-dna"></i> + Cock/Hen</button>
@@ -342,7 +344,6 @@
                 headers = headers.filter(h => !HIDE_CONFIGS[tabId].includes(h.toUpperCase().trim()));
             }
 
-            // Case-Insensitive Matching Rules to Prevent Code Freezes
             if (tabId === 'chicks') {
                 headers = headers.filter(h => h.toUpperCase() !== "RING");
                 
@@ -399,62 +400,4 @@
             }
 
             let html = `<table class="w-full text-left border-collapse text-xs md:text-sm">`;
-            html += `<thead class="bg-gray-100 border-b border-gray-300 text-gray-700 uppercase font-bold sticky top-0"><tr>`;
-            
-            headers.forEach(h => {
-                let cleanTitle = h.replace(/_/g, " ");
-                if(cleanTitle.toUpperCase() === "RACEINDEX CALC") cleanTitle = "Race Index";
-                if(cleanTitle.toUpperCase() === "FEDERATIONPOS") cleanTitle = "Fed Position";
-                
-                let sortClass = masterState.sortColumn === h ? (masterState.sortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : '';
-                html += `<th onclick="handleSort('${h}')" class="p-3 whitespace-nowrap tracking-wider ${sortClass}">${cleanTitle}</th>`;
-            });
-            
-            if (tabId === 'chicks') {
-                html += `<th class="p-3 bg-blue-50 text-blue-800 font-bold tracking-wider">STATUS</th>`;
-            }
-            html += `</tr></thead><tbody class="divide-y divide-gray-200">`;
-
-            records.forEach((row, rIdx) => {
-                const rowBg = rIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
-                html += `<tr class="${rowBg} hover:bg-blue-50/30 transition">`;
-                
-                headers.forEach(h => {
-                    let val = row[h] !== undefined ? row[h] : '';
-                    if (String(h).toUpperCase().includes("INDEX") && !String(val).includes("%") && !isNaN(parseFloat(val))) {
-                        if (parseFloat(val) <= 1.0) val = (parseFloat(val) * 100).toFixed(2) + "%";
-                    }
-                    html += `<td class="p-3 whitespace-nowrap font-medium text-gray-600">${val}</td>`;
-                });
-
-                if (tabId === 'chicks') {
-                    let chickId = row["ChickID"] || row["ChickID_1"] || "";
-                    let currentStatus = masterState.chickStatuses[chickId] || "Active";
-                    let selectColor = currentStatus === 'Active' ? "border-green-400 bg-green-50 text-green-700" : (currentStatus === 'Lost' ? "border-amber-400 bg-amber-50 text-amber-700" : "border-red-400 bg-red-50 text-red-700");
-
-                    html += `<td class="p-2 whitespace-nowrap">
-                        <select onchange="updateChickStatus('${chickId}', this.value); this.className='border rounded px-2 py-0.5 text-xs font-bold focus:outline-none ' + (this.value==='Active'?'border-green-400 bg-green-50 text-green-700':(this.value==='Lost'?'border-amber-400 bg-amber-50 text-amber-700':'border-red-400 bg-red-50 text-red-700'))" class="border rounded px-2 py-0.5 text-xs font-bold focus:outline-none ${selectColor}">
-                            <option value="Active" ${currentStatus==='Active'?'selected':''}>Active</option>
-                            <option value="Lost" ${currentStatus==='Lost'?'selected':''}>Lost</option>
-                            <option value="Dead" ${currentStatus==='Dead'?'selected':''}>Dead</option>
-                        </select>
-                    </td>`;
-                }
-                html += `</tr>`;
-            });
-
-            html += `</tbody></table>`;
-            viewport.innerHTML = html;
-        }
-
-        // Clean safety fallback for mock submission tracking
-        function handleFormSubmit(event, type) {
-            event.preventDefault();
-            const form = event.target;
-            alert(`🚀 Asset values compiled! Sync connection verified.\nData payload captured.`);
-            form.reset();
-            toggleModal(type === 'chick' ? 'chickModal' : 'pigeonModal');
-        }
-    </script>
-</body>
-</html>
+            html += `<thead class="bg-gray-100 border-b border-gray-300 text-gray-
